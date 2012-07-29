@@ -1,6 +1,7 @@
 namespace Flux
 {
     using System;
+    using System.Collections.Concurrent;
     using System.Collections.Generic;
     using System.Net.Sockets;
     using System.Text;
@@ -11,14 +12,16 @@ namespace Flux
 
     internal sealed class Instance : IDisposable
     {
+        private static readonly ConcurrentDictionary<Socket, int> LiveSockets = new ConcurrentDictionary<Socket, int>();
         private readonly byte[] _100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
-        private readonly Socket _socket;
+        private readonly TcpClient _tcpClient;
         private readonly App _app;
-        private NetworkStream _networkStream;
+        private readonly NetworkStream _networkStream;
 
-        public Instance(Socket socket, App app)
+        public Instance(TcpClient tcpClient, App app)
         {
-            _socket = socket;
+            _tcpClient = tcpClient;
+            _networkStream = _tcpClient.GetStream();
             _app = app;
         }
 
@@ -28,9 +31,9 @@ namespace Flux
                 {
                     { OwinConstants.Version, "0.8" }
                 };
-            _networkStream = new NetworkStream(_socket, false);
             var requestLine = RequestLineParser.Parse(_networkStream);
             env[OwinConstants.RequestMethod] = requestLine.Method;
+            env[OwinConstants.RequestPathBase] = string.Empty;
             if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
             {
                 Uri uri;
@@ -41,13 +44,25 @@ namespace Flux
                     env[OwinConstants.RequestScheme] = uri.Scheme;
                 }
             }
+            else
+            {
+                var splitUri = requestLine.Uri.Split('?');
+                env[OwinConstants.RequestPath] = splitUri[0];
+                env[OwinConstants.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
+                env[OwinConstants.RequestScheme] = "http";
+            }
             var headers = HeaderParser.Parse(_networkStream);
             string[] expectContinue;
             if (headers.TryGetValue("Expect", out expectContinue))
             {
                 if (expectContinue.Length == 1 && expectContinue[0].Equals("100-Continue", StringComparison.OrdinalIgnoreCase))
                 {
-                    _networkStream.Write(_100Continue, 0, _100Continue.Length);
+                    return _networkStream.WriteAsync(_100Continue, 0, _100Continue.Length)
+                        .ContinueWith(t =>
+                            {
+                                if (t.IsFaulted) return t;
+                                return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
+                            }).Unwrap();
                 }
             }
             return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
@@ -70,7 +85,8 @@ namespace Flux
                     {
                         if (!(t.IsFaulted || t.IsCanceled))
                         {
-                            return body(_networkStream, CancellationToken.None);
+                            return body(_networkStream, CancellationToken.None)
+                                .ContinueWith(_ => Dispose());
                         }
                         return t;
                     }).Unwrap();
@@ -78,7 +94,7 @@ namespace Flux
 
         public void Dispose()
         {
-            _socket.Close();
+            _tcpClient.Close();
         }
     }
 }

@@ -41,7 +41,7 @@ namespace Flux
             if (0 != Interlocked.CompareExchange(ref _started, 1, 0)) throw new InvalidOperationException("Server is already started.");
 
             _listener.Start();
-            _listener.BeginAcceptSocket(Callback, null);
+            _listener.BeginAcceptTcpClient(Callback, null);
         }
 
         public void Stop()
@@ -51,10 +51,10 @@ namespace Flux
 
         private void Callback(IAsyncResult ar)
         {
-            Socket socket;
+            TcpClient socket;
             try
             {
-                socket = _listener.EndAcceptSocket(ar);
+                socket = _listener.EndAcceptTcpClient(ar);
             }
             catch (ObjectDisposedException)
             {
@@ -65,7 +65,6 @@ namespace Flux
             instance.Run()
                 .ContinueWith(t =>
                     {
-                        instance.Dispose();
                         if (t.IsFaulted)
                         {
                             Trace.TraceError(t.Exception.Message);
