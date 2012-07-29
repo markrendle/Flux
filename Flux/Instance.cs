@@ -1,8 +1,8 @@
 namespace Flux
 {
     using System;
-    using System.Collections.Concurrent;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using System.Net.Sockets;
     using System.Text;
     using System.Threading;
@@ -12,11 +12,12 @@ namespace Flux
 
     internal sealed class Instance : IDisposable
     {
-        private static readonly ConcurrentDictionary<Socket, int> LiveSockets = new ConcurrentDictionary<Socket, int>();
         private readonly byte[] _100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
         private readonly TcpClient _tcpClient;
         private readonly App _app;
         private readonly NetworkStream _networkStream;
+        private readonly byte[] _404NotFound = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not found");
+        private BufferStream _bufferStream;
 
         public Instance(TcpClient tcpClient, App app)
         {
@@ -68,33 +69,130 @@ namespace Flux
             return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
         }
 
+        internal BufferStream Buffer
+        {
+            get { return _bufferStream ?? (_bufferStream = new BufferStream());}
+        }
+
         private Task Result(int status, IDictionary<string, string[]> headers, BodyDelegate body)
         {
+            if (status == 0)
+            {
+                return _networkStream.WriteAsync(_404NotFound, 0, _404NotFound.Length)
+                    .ContinueWith(_ => Dispose());
+            }
+
+            bool contentLengthSet = false;
+
             var headerBuilder = new StringBuilder("HTTP/1.1 " + status + "\r\n");
             foreach (var header in headers)
             {
+                if (header.Key.Equals("Content-Length", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    contentLengthSet = true;
+                }
                 foreach (var value in header.Value)
                 {
                     headerBuilder.AppendFormat("{0}: {1}\r\n", header.Key, value);
                 }
             }
+
+            if (body == null)
+            {
+                headerBuilder.Append("\r\n");
+                var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
+                return _networkStream.WriteAsync(bytes, 0, bytes.Length)
+                    .ContinueWith(t => Dispose());
+            }
+
+            if (!contentLengthSet)
+            {
+                return WriteWithBuffer(body, headerBuilder);
+            }
+
+            return WriteUnbuffered(body, headerBuilder);
+        }
+
+        private Task WriteUnbuffered(BodyDelegate body, StringBuilder headerBuilder)
+        {
             headerBuilder.Append("\r\n");
             var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
             return _networkStream.WriteAsync(bytes, 0, bytes.Length)
                 .ContinueWith(t =>
                     {
+                        if (t.IsFaulted || t.IsCanceled)
+                        {
+                            return t;
+                        }
+                        return body(_networkStream, CancellationToken.None)
+                            .ContinueWith(_ => Dispose());
+                    }).Unwrap();
+        }
+
+        private Task WriteWithBuffer(BodyDelegate body, StringBuilder headerBuilder)
+        {
+            return body(Buffer, CancellationToken.None)
+                .ContinueWith(t =>
+                    {
+                        Buffer.InternalStream.Position = 0;
+                        headerBuilder.AppendFormat("Content-Length: {0}\r\n", Buffer.InternalStream.Length);
+                        headerBuilder.Append("\r\n");
+                        var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
                         if (!(t.IsFaulted || t.IsCanceled))
                         {
-                            return body(_networkStream, CancellationToken.None)
-                                .ContinueWith(_ => Dispose());
+                            var writeTask = _networkStream.WriteAsync(bytes, 0, bytes.Length);
+                            if (Buffer.InternalStream.Length > 0)
+                            {
+                                return CopyBufferToNetworkStream(writeTask);
+                            }
+                            return writeTask;
                         }
+                        Buffer.ForceDispose();
+                        Dispose();
                         return t;
                     }).Unwrap();
         }
 
+        private Task CopyBufferToNetworkStream(Task writeTask)
+        {
+            return writeTask.ContinueWith(t2 =>
+                {
+                    if (!(t2.IsFaulted || t2.IsCanceled))
+                    {
+                        byte[] buffer;
+                        if (Buffer.Length < int.MaxValue && Buffer.TryGetBuffer(out buffer))
+                        {
+                            return _networkStream.WriteAsync(buffer, 0, (int) Buffer.Length)
+                                .ContinueWith(t3 => Dispose());
+                        }
+                        Buffer.InternalStream.CopyTo(_networkStream);
+                    }
+                    Dispose();
+                    return writeTask;
+                }).Unwrap();
+        }
+
         public void Dispose()
         {
-            _tcpClient.Close();
+            try
+            {
+                _tcpClient.Close();
+            }
+            catch(Exception ex)
+            {
+                Trace.TraceError(ex.Message);
+            }
+            if (_bufferStream != null)
+            {
+                try
+                {
+                    _bufferStream.ForceDispose();
+                }
+                catch (Exception ex)
+                {
+                    Trace.TraceError(ex.Message);
+                }
+            }
         }
     }
 }

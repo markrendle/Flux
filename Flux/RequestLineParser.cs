@@ -5,7 +5,7 @@ namespace Flux
     using System.Linq;
     using System.Text;
 
-    public class RequestLineParser
+    internal static class RequestLineParser
     {
         private const int CR = '\r';
         private const int LF = '\n';

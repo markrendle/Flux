@@ -1,6 +1,5 @@
 ﻿namespace Flux.Test
 {
-    using System.Collections.Generic;
     using System.IO;
     using System.Linq;
     using System.Text;
@@ -45,15 +44,6 @@
             Assert.Contains("text/html; charset=UTF-8", headers["Content-Type"]);
             Assert.Contains("keep-alive", headers["Connection"]);
             Assert.Contains("Keep-Alive", headers["Connection"]);
-        }
-
-        private static void AssertMulti(IEnumerable<string> actual, params string[] values)
-        {
-            var list = actual.ToList();
-            foreach (var value in values)
-            {
-                Assert.Contains(value, list);
-            }
         }
     }
 }

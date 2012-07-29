@@ -1,6 +1,6 @@
 namespace Flux
 {
-    public class RequestLine
+    internal class RequestLine
     {
         private readonly string _method;
         private readonly string _uri;

@@ -43,6 +43,19 @@
       <Private>True</Private>
       <HintPath>..\packages\Microsoft.Web.Infrastructure.1.0.0.0\lib\net40\Microsoft.Web.Infrastructure.dll</HintPath>
     </Reference>
+    <Reference Include="Simple.Web, Version=0.4.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.JsonFx">
+      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.JsonFx.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.Razor">
+      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.Razor.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.Xml">
+      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.Xml.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Web.Helpers, Version=2.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35, processorArchitecture=MSIL">
@@ -82,10 +95,6 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Simple.Web\Simple.Web\Simple.Web.csproj">
-      <Project>{903c289d-4cae-4259-80da-79d74ce06dce}</Project>
-      <Name>Simple.Web</Name>
-    </ProjectReference>
     <ProjectReference Include="..\Flux\Flux.csproj">
       <Project>{0DAB257B-7013-4307-9381-913086D3E2AD}</Project>
       <Name>Flux</Name>

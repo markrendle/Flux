@@ -1,6 +1,6 @@
 namespace Flux
 {
-    public static class OwinConstants
+    internal static class OwinConstants
     {
         public const string Version = "owin.Version";
         public const string RequestScheme = "owin.RequestScheme";

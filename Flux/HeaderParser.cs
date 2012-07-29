@@ -4,10 +4,9 @@ namespace Flux
     using System.Collections.Generic;
     using System.Collections.Specialized;
     using System.IO;
-    using System.Linq;
     using System.Text;
 
-    public class HeaderParser
+    internal static class HeaderParser
     {
         private const int CR = '\r';
         private const int LF = '\n';
@@ -40,7 +39,7 @@ namespace Flux
 
         private static byte[] ReadHeaderBytes(Stream stream)
         {
-            var bytes = new LinkedList<byte>();
+            var bytes = new List<byte>();
             bool mightBeEnd = false;
 
             while (true)
@@ -51,8 +50,8 @@ namespace Flux
                     b = stream.ReadByte();
                     if (b != LF)
                     {
-                        bytes.AddLast(CR);
-                        bytes.AddLast((byte)b);
+                        bytes.Add(CR);
+                        bytes.Add((byte)b);
                         continue;
                     }
                     if (mightBeEnd)
@@ -60,12 +59,12 @@ namespace Flux
                         break;
                     }
                     mightBeEnd = true;
-                    bytes.AddLast(CR);
-                    bytes.AddLast(LF);
+                    bytes.Add(CR);
+                    bytes.Add(LF);
                     continue;
                 }
                 mightBeEnd = false;
-                bytes.AddLast((byte)b);
+                bytes.Add((byte)b);
             }
             return bytes.ToArray();
         }

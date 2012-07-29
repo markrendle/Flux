@@ -4,7 +4,7 @@ namespace Flux
     using System.Runtime.Serialization;
 
     [Serializable]
-    public class InvalidRequestException : Exception
+    public sealed class InvalidRequestException : Exception
     {
         private readonly string _requestText;
 
@@ -19,6 +19,7 @@ namespace Flux
             _requestText = requestText;
         }
 
+#pragma warning disable 628
         protected InvalidRequestException(
             SerializationInfo info,
             StreamingContext context)
@@ -26,6 +27,7 @@ namespace Flux
         {
             _requestText = info.GetString("RequestText");
         }
+#pragma warning restore 628
 
         public string RequestText
         {
