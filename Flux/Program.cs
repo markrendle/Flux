@@ -3,6 +3,7 @@
     using System;
     using System.ComponentModel.Composition;
     using System.ComponentModel.Composition.Hosting;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Reflection;
@@ -13,7 +14,7 @@
         private static Fixer _fixer;
         private static bool _stop;
 
-        static void Main(string[] args)
+        public static void Main(string[] args)
         {
             int port = 0;
             if (args.Length == 0)
@@ -79,8 +80,25 @@
 
         private static void FixUpAssemblies(Fixer fixer, string searchPattern, string directory)
         {
-            using (var catalog = new DirectoryCatalog(directory, searchPattern))
+            using (var catalog = new AggregateCatalog())
             {
+                foreach (var file in Directory.GetFiles(directory, searchPattern))
+                {
+                    try
+                    {
+                        var assembly = Assembly.LoadFile(file);
+                        if (assembly.FullName.StartsWith("Microsoft.") || assembly.FullName.StartsWith("System."))
+                        {
+                            continue;
+                        }
+                        var assemblyCatalog = new AssemblyCatalog(assembly);
+                        catalog.Catalogs.Add(assemblyCatalog);
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.TraceError(ex.Message);
+                    }
+                }
                 var container = new CompositionContainer(catalog);
                 container.ComposeParts(fixer);
             }

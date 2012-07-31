@@ -28,45 +28,54 @@ namespace Flux
 
         public Task Run()
         {
-            var env = new Dictionary<string, object>
+            try
+            {
+                var env = new Dictionary<string, object>
                 {
                     { OwinConstants.Version, "0.8" }
                 };
-            var requestLine = RequestLineParser.Parse(_networkStream);
-            env[OwinConstants.RequestMethod] = requestLine.Method;
-            env[OwinConstants.RequestPathBase] = string.Empty;
-            if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
-            {
-                Uri uri;
-                if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
+                var requestLine = RequestLineParser.Parse(_networkStream);
+                env[OwinConstants.RequestMethod] = requestLine.Method;
+                env[OwinConstants.RequestPathBase] = string.Empty;
+                if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
                 {
-                    env[OwinConstants.RequestPath] = uri.AbsolutePath;
-                    env[OwinConstants.RequestQueryString] = uri.Query;
-                    env[OwinConstants.RequestScheme] = uri.Scheme;
+                    Uri uri;
+                    if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
+                    {
+                        env[OwinConstants.RequestPath] = uri.AbsolutePath;
+                        env[OwinConstants.RequestQueryString] = uri.Query;
+                        env[OwinConstants.RequestScheme] = uri.Scheme;
+                    }
                 }
-            }
-            else
-            {
-                var splitUri = requestLine.Uri.Split('?');
-                env[OwinConstants.RequestPath] = splitUri[0];
-                env[OwinConstants.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
-                env[OwinConstants.RequestScheme] = "http";
-            }
-            var headers = HeaderParser.Parse(_networkStream);
-            string[] expectContinue;
-            if (headers.TryGetValue("Expect", out expectContinue))
-            {
-                if (expectContinue.Length == 1 && expectContinue[0].Equals("100-Continue", StringComparison.OrdinalIgnoreCase))
+                else
                 {
-                    return _networkStream.WriteAsync(_100Continue, 0, _100Continue.Length)
-                        .ContinueWith(t =>
-                            {
-                                if (t.IsFaulted) return t;
-                                return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
-                            }).Unwrap();
+                    var splitUri = requestLine.Uri.Split('?');
+                    env[OwinConstants.RequestPath] = splitUri[0];
+                    env[OwinConstants.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
+                    env[OwinConstants.RequestScheme] = "http";
                 }
+                var headers = HeaderParser.Parse(_networkStream);
+                string[] expectContinue;
+                if (headers.TryGetValue("Expect", out expectContinue))
+                {
+                    if (expectContinue.Length == 1 && expectContinue[0].Equals("100-Continue", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return _networkStream.WriteAsync(_100Continue, 0, _100Continue.Length)
+                            .ContinueWith(t =>
+                                {
+                                    if (t.IsFaulted) return t;
+                                    return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
+                                }).Unwrap();
+                    }
+                }
+                return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
             }
-            return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
+            catch (Exception ex)
+            {
+                var tcs = new TaskCompletionSource<object>();
+                tcs.SetException(ex);
+                return tcs.Task;
+            }
         }
 
         internal BufferStream Buffer
