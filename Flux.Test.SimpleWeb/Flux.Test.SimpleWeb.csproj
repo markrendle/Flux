@@ -33,11 +33,13 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Fix">
-      <HintPath>..\packages\Fix.0.1\lib\net40\Fix.dll</HintPath>
+    <Reference Include="Fix, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\Fix\Fix.AspNet\bin\Debug\Fix.dll</HintPath>
     </Reference>
-    <Reference Include="Fix.AspNet">
-      <HintPath>..\packages\Fix.AspNet.0.1\lib\net40\Fix.AspNet.dll</HintPath>
+    <Reference Include="Fix.AspNet, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\Fix\Fix.AspNet\bin\Debug\Fix.AspNet.dll</HintPath>
     </Reference>
     <Reference Include="JsonFx">
       <HintPath>..\packages\JsonFx.2.0.1106.2610\lib\net40\JsonFx.dll</HintPath>
@@ -48,16 +50,7 @@
     </Reference>
     <Reference Include="Simple.Web, Version=0.4.1.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.dll</HintPath>
-    </Reference>
-    <Reference Include="Simple.Web.JsonFx">
-      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.JsonFx.dll</HintPath>
-    </Reference>
-    <Reference Include="Simple.Web.Razor">
-      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.Razor.dll</HintPath>
-    </Reference>
-    <Reference Include="Simple.Web.Xml">
-      <HintPath>..\packages\Simple.Web.0.4.1\lib\net40\Simple.Web.Xml.dll</HintPath>
+      <HintPath>..\..\Simple.Web\Simple.Web\bin\Release\Simple.Web.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

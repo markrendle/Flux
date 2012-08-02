@@ -6,11 +6,30 @@
     using System.Net.Sockets;
     using System.Threading;
     using System.Threading.Tasks;
-    using App = System.Func<System.Collections.Generic.IDictionary<string, object>, System.Collections.Generic.IDictionary<string, string[]>, System.IO.Stream, System.Threading.CancellationToken, System.Func<int, System.Collections.Generic.IDictionary<string, string[]>, System.Func<System.IO.Stream, System.Threading.CancellationToken, System.Threading.Tasks.Task>, System.Threading.Tasks.Task>, System.Delegate, System.Threading.Tasks.Task>;
+    using AppFunc = System.Func< // Call
+        System.Collections.Generic.IDictionary<string, object>, // Environment
+        System.Collections.Generic.IDictionary<string, string[]>, // Headers
+        System.IO.Stream, // Body
+        System.Threading.Tasks.Task<System.Tuple< //Result
+            System.Collections.Generic.IDictionary<string, object>, // Properties
+            int, // Status
+            System.Collections.Generic.IDictionary<string, string[]>, // Headers
+            System.Func< // Body
+                System.IO.Stream, // Output
+                System.Threading.Tasks.Task>>>>; // Done
+    using Result = System.Tuple< //Result
+        System.Collections.Generic.IDictionary<string, object>, // Properties
+        int, // Status
+        System.Collections.Generic.IDictionary<string, string[]>, // Headers
+        System.Func< // Body
+            System.IO.Stream, // Output
+            System.Threading.Tasks.Task>>; // Done
+
+    using BodyDelegate = System.Func<System.IO.Stream, System.Threading.Tasks.Task>;
 
     public sealed class Server : IDisposable
     {
-        private App _app;
+        private AppFunc _app;
         private static readonly IPAddress Localhost = new IPAddress(new byte[] { 0, 0, 0, 0 });
         private readonly TcpListener _listener;
         private readonly IPAddress _ipAddress;
@@ -37,7 +56,7 @@
             unobservedTaskExceptionEventArgs.SetObserved();
         }
 
-        public void Start(App app)
+        public void Start(AppFunc app)
         {
             if (0 != Interlocked.CompareExchange(ref _started, 1, 0)) throw new InvalidOperationException("Server is already started.");
 

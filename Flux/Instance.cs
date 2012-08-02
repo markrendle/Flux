@@ -3,23 +3,43 @@ namespace Flux
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.IO;
     using System.Net.Sockets;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using App = System.Func<System.Collections.Generic.IDictionary<string, object>, System.Collections.Generic.IDictionary<string, string[]>, System.IO.Stream, System.Threading.CancellationToken, System.Func<int, System.Collections.Generic.IDictionary<string, string[]>, System.Func<System.IO.Stream, System.Threading.CancellationToken, System.Threading.Tasks.Task>, System.Threading.Tasks.Task>, System.Delegate, System.Threading.Tasks.Task>;
-    using BodyDelegate = System.Func<System.IO.Stream, System.Threading.CancellationToken, System.Threading.Tasks.Task>;
+    using AppFunc = System.Func< // Call
+        System.Collections.Generic.IDictionary<string, object>, // Environment
+        System.Collections.Generic.IDictionary<string, string[]>, // Headers
+        System.IO.Stream, // Body
+        System.Threading.Tasks.Task<System.Tuple< //Result
+            System.Collections.Generic.IDictionary<string, object>, // Properties
+            int, // Status
+            System.Collections.Generic.IDictionary<string, string[]>, // Headers
+            System.Func< // Body
+                System.IO.Stream, // Output
+                System.Threading.Tasks.Task>>>>; // Done
+    using Result = System.Tuple< //Result
+        System.Collections.Generic.IDictionary<string, object>, // Properties
+        int, // Status
+        System.Collections.Generic.IDictionary<string, string[]>, // Headers
+        System.Func< // Body
+            System.IO.Stream, // Output
+            System.Threading.Tasks.Task>>; // Done
+
+    using BodyDelegate = System.Func<System.IO.Stream, System.Threading.Tasks.Task>;
 
     internal sealed class Instance : IDisposable
     {
         private readonly byte[] _100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
         private readonly TcpClient _tcpClient;
-        private readonly App _app;
+        private readonly AppFunc _app;
         private readonly NetworkStream _networkStream;
         private readonly byte[] _404NotFound = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not found");
+        private readonly byte[] _500InternalServerError = Encoding.UTF8.GetBytes("HTTP/1.1 500 Internal Server Error");
         private BufferStream _bufferStream;
 
-        public Instance(TcpClient tcpClient, App app)
+        public Instance(TcpClient tcpClient, AppFunc app)
         {
             _tcpClient = tcpClient;
             _networkStream = _tcpClient.GetStream();
@@ -64,11 +84,13 @@ namespace Flux
                             .ContinueWith(t =>
                                 {
                                     if (t.IsFaulted) return t;
-                                    return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
+                                    return _app(env, headers, _networkStream)
+                                        .ContinueWith(t2 => Result(t2));
                                 }).Unwrap();
                     }
                 }
-                return _app(env, headers, _networkStream, CancellationToken.None, Result, null);
+                return _app(env, headers, _networkStream)
+                    .ContinueWith(t2 => Result(t2));
             }
             catch (Exception ex)
             {
@@ -122,6 +144,56 @@ namespace Flux
             return WriteUnbuffered(body, headerBuilder);
         }
 
+        private Task Result(Task<Result> task)
+        {
+            if (task.IsFaulted)
+            {
+                return _networkStream.WriteAsync(_500InternalServerError, 0, _500InternalServerError.Length)
+                    .ContinueWith(_ => Dispose());
+            }
+
+            if (task.Result.Item2 == 0 || task.Result.Item2 == 404)
+            {
+                return _networkStream.WriteAsync(_404NotFound, 0, _404NotFound.Length)
+                    .ContinueWith(_ => Dispose());
+            }
+
+            return WriteResult(task.Result.Item1, task.Result.Item2, task.Result.Item3, task.Result.Item4);
+        }
+
+        private Task WriteResult(IDictionary<string,object> properties, int status, IDictionary<string,string[]> headers, Func<Stream,Task> body)
+        {
+            bool contentLengthSet = false;
+
+            var headerBuilder = new StringBuilder("HTTP/1.1 " + status + "\r\n");
+            foreach (var header in headers)
+            {
+                if (header.Key.Equals("Content-Length", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    contentLengthSet = true;
+                }
+                foreach (var value in header.Value)
+                {
+                    headerBuilder.AppendFormat("{0}: {1}\r\n", header.Key, value);
+                }
+            }
+
+            if (body == null)
+            {
+                headerBuilder.Append("\r\n");
+                var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
+                return _networkStream.WriteAsync(bytes, 0, bytes.Length)
+                    .ContinueWith(t => Dispose());
+            }
+
+            if (!contentLengthSet)
+            {
+                return WriteWithBuffer(body, headerBuilder);
+            }
+
+            return WriteUnbuffered(body, headerBuilder);
+        }
+
         private Task WriteUnbuffered(BodyDelegate body, StringBuilder headerBuilder)
         {
             headerBuilder.Append("\r\n");
@@ -133,14 +205,14 @@ namespace Flux
                         {
                             return t;
                         }
-                        return body(_networkStream, CancellationToken.None)
+                        return body(_networkStream)
                             .ContinueWith(_ => Dispose());
                     }).Unwrap();
         }
 
         private Task WriteWithBuffer(BodyDelegate body, StringBuilder headerBuilder)
         {
-            return body(Buffer, CancellationToken.None)
+            return body(Buffer)
                 .ContinueWith(t =>
                     {
                         Buffer.InternalStream.Position = 0;
