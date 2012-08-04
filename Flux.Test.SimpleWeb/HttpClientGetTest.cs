@@ -6,7 +6,6 @@ namespace Flux.Test.SimpleWeb
     using System.Net;
     using System.Threading;
     using Simple.Web;
-    using Simple.Web.Behaviors;
     using Xunit;
 
     public class WebClientGetTest
@@ -80,16 +79,5 @@ namespace Flux.Test.SimpleWeb
                 Assert.Equal("<h1>Pass</h1>", actual);
             }
         }
-    }
-
-    [UriTemplate("/")]
-    public class Index : IGet, IOutput<RawHtml>
-    {
-        public Status Get()
-        {
-            return 200;
-        }
-
-        public RawHtml Output { get { return "<h1>Pass</h1>"; } }
     }
 }

@@ -33,9 +33,9 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Fix, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Fix, Version=0.2.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Fix\Fix.AspNet\bin\Debug\Fix.dll</HintPath>
+      <HintPath>..\packages\Fix.0.2\lib\net40\Fix.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
@@ -50,7 +50,6 @@
     <Compile Include="BufferStream.cs" />
     <Compile Include="HeaderParser.cs" />
     <Compile Include="InvalidRequestException.cs" />
-    <Compile Include="OwinConstants.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="RequestLine.cs" />
     <Compile Include="RequestLineParser.cs" />
@@ -58,6 +57,9 @@
     <Compile Include="Instance.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="StreamExtensions.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

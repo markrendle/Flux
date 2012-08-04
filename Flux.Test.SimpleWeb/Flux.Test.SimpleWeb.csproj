@@ -33,13 +33,13 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Fix, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Fix, Version=0.2.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Fix\Fix.AspNet\bin\Debug\Fix.dll</HintPath>
+      <HintPath>..\packages\Fix.0.2\lib\net40\Fix.dll</HintPath>
     </Reference>
-    <Reference Include="Fix.AspNet, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Fix.AspNet, Version=0.2.0.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Fix\Fix.AspNet\bin\Debug\Fix.AspNet.dll</HintPath>
+      <HintPath>..\packages\Fix.AspNet.0.2\lib\net40\Fix.AspNet.dll</HintPath>
     </Reference>
     <Reference Include="JsonFx">
       <HintPath>..\packages\JsonFx.2.0.1106.2610\lib\net40\JsonFx.dll</HintPath>
@@ -48,9 +48,21 @@
       <Private>True</Private>
       <HintPath>..\packages\Microsoft.Web.Infrastructure.1.0.0.0\lib\net40\Microsoft.Web.Infrastructure.dll</HintPath>
     </Reference>
-    <Reference Include="Simple.Web, Version=0.4.1.0, Culture=neutral, processorArchitecture=MSIL">
+    <Reference Include="Simple.Web, Version=0.4.2.0, Culture=neutral, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Simple.Web\Simple.Web\bin\Release\Simple.Web.dll</HintPath>
+      <HintPath>..\packages\Simple.Web.0.4.2.1\lib\net40\Simple.Web.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.AspNet">
+      <HintPath>..\packages\Simple.Web.AspNet.0.4.2.1\lib\net40\Simple.Web.AspNet.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.JsonFx">
+      <HintPath>..\packages\Simple.Web.0.4.2.1\lib\net40\Simple.Web.JsonFx.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.Razor">
+      <HintPath>..\packages\Simple.Web.0.4.2.1\lib\net40\Simple.Web.Razor.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.Xml">
+      <HintPath>..\packages\Simple.Web.0.4.2.1\lib\net40\Simple.Web.Xml.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -85,6 +97,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="HttpClientGetTest.cs" />
+    <Compile Include="Index.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

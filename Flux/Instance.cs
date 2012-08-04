@@ -8,6 +8,7 @@ namespace Flux
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using Fix;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
         System.Collections.Generic.IDictionary<string, string[]>, // Headers
@@ -52,27 +53,27 @@ namespace Flux
             {
                 var env = new Dictionary<string, object>
                 {
-                    { OwinConstants.Version, "0.8" }
+                    { OwinKeys.Version, "0.8" }
                 };
                 var requestLine = RequestLineParser.Parse(_networkStream);
-                env[OwinConstants.RequestMethod] = requestLine.Method;
-                env[OwinConstants.RequestPathBase] = string.Empty;
+                env[OwinKeys.RequestMethod] = requestLine.Method;
+                env[OwinKeys.RequestPathBase] = string.Empty;
                 if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
                 {
                     Uri uri;
                     if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
                     {
-                        env[OwinConstants.RequestPath] = uri.AbsolutePath;
-                        env[OwinConstants.RequestQueryString] = uri.Query;
-                        env[OwinConstants.RequestScheme] = uri.Scheme;
+                        env[OwinKeys.RequestPath] = uri.AbsolutePath;
+                        env[OwinKeys.RequestQueryString] = uri.Query;
+                        env[OwinKeys.RequestScheme] = uri.Scheme;
                     }
                 }
                 else
                 {
                     var splitUri = requestLine.Uri.Split('?');
-                    env[OwinConstants.RequestPath] = splitUri[0];
-                    env[OwinConstants.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
-                    env[OwinConstants.RequestScheme] = "http";
+                    env[OwinKeys.RequestPath] = splitUri[0];
+                    env[OwinKeys.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
+                    env[OwinKeys.RequestScheme] = "http";
                 }
                 var headers = HeaderParser.Parse(_networkStream);
                 string[] expectContinue;
