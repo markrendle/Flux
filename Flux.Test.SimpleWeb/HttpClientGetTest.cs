@@ -44,9 +44,10 @@ namespace Flux.Test.SimpleWeb
                     };
                 client.DownloadStringAsync(uri);
             }
-            SpinWait.SpinUntil(() => bag.Count == count, 10000);
+            SpinWait.SpinUntil(() => bag.Count == count);
             server.Stop();
             Assert.Equal(count, bag.Count);
+            int iteration = 0;
             foreach (var actual in bag)
             {
                 Assert.Equal("<h1>Pass</h1>", actual);

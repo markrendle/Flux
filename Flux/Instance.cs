@@ -3,7 +3,7 @@ namespace Flux
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
-    using System.IO;
+    using System.Globalization;
     using System.Net.Sockets;
     using System.Text;
     using System.Threading;
@@ -11,24 +11,7 @@ namespace Flux
     using Fix;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
-        System.Collections.Generic.IDictionary<string, string[]>, // Headers
-        System.IO.Stream, // Body
-        System.Threading.Tasks.Task<System.Tuple< //Result
-            System.Collections.Generic.IDictionary<string, object>, // Properties
-            int, // Status
-            System.Collections.Generic.IDictionary<string, string[]>, // Headers
-            System.Func< // Body
-                System.IO.Stream, // Output
-                System.Threading.Tasks.Task>>>>; // Done
-    using Result = System.Tuple< //Result
-        System.Collections.Generic.IDictionary<string, object>, // Properties
-        int, // Status
-        System.Collections.Generic.IDictionary<string, string[]>, // Headers
-        System.Func< // Body
-            System.IO.Stream, // Output
-            System.Threading.Tasks.Task>>; // Done
-
-    using BodyDelegate = System.Func<System.IO.Stream, System.Threading.Tasks.Task>;
+        System.Threading.Tasks.Task>; // Completion
 
     internal sealed class Instance : IDisposable
     {
@@ -51,31 +34,11 @@ namespace Flux
         {
             try
             {
-                var env = new Dictionary<string, object>
-                {
-                    { OwinKeys.Version, "0.8" }
-                };
-                var requestLine = RequestLineParser.Parse(_networkStream);
-                env[OwinKeys.RequestMethod] = requestLine.Method;
-                env[OwinKeys.RequestPathBase] = string.Empty;
-                if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    Uri uri;
-                    if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
-                    {
-                        env[OwinKeys.RequestPath] = uri.AbsolutePath;
-                        env[OwinKeys.RequestQueryString] = uri.Query;
-                        env[OwinKeys.RequestScheme] = uri.Scheme;
-                    }
-                }
-                else
-                {
-                    var splitUri = requestLine.Uri.Split('?');
-                    env[OwinKeys.RequestPath] = splitUri[0];
-                    env[OwinKeys.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
-                    env[OwinKeys.RequestScheme] = "http";
-                }
+                var env = CreateEnvironmentDictionary();
                 var headers = HeaderParser.Parse(_networkStream);
+                env[OwinKeys.RequestHeaders] = headers;
+                env[OwinKeys.ResponseHeaders] = new Dictionary<string, string[]>();
+                env[OwinKeys.ResponseBody] = Buffer;
                 string[] expectContinue;
                 if (headers.TryGetValue("Expect", out expectContinue))
                 {
@@ -85,13 +48,13 @@ namespace Flux
                             .ContinueWith(t =>
                                 {
                                     if (t.IsFaulted) return t;
-                                    return _app(env, headers, _networkStream)
-                                        .ContinueWith(t2 => Result(t2));
+                                    return _app(env)
+                                        .ContinueWith(t2 => Result(t2, env));
                                 }).Unwrap();
                     }
                 }
-                return _app(env, headers, _networkStream)
-                    .ContinueWith(t2 => Result(t2));
+                return _app(env)
+                    .ContinueWith(t2 => Result(t2, env));
             }
             catch (Exception ex)
             {
@@ -101,51 +64,44 @@ namespace Flux
             }
         }
 
+        private Dictionary<string, object> CreateEnvironmentDictionary()
+        {
+            var env = new Dictionary<string, object>
+                          {
+                              {OwinKeys.Version, "0.8"}
+                          };
+            var requestLine = RequestLineParser.Parse(_networkStream);
+            env[OwinKeys.RequestMethod] = requestLine.Method;
+            env[OwinKeys.RequestPathBase] = string.Empty;
+            if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
+            {
+                Uri uri;
+                if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
+                {
+                    env[OwinKeys.RequestPath] = uri.AbsolutePath;
+                    env[OwinKeys.RequestQueryString] = uri.Query;
+                    env[OwinKeys.RequestScheme] = uri.Scheme;
+                }
+            }
+            else
+            {
+                var splitUri = requestLine.Uri.Split('?');
+                env[OwinKeys.RequestPath] = splitUri[0];
+                env[OwinKeys.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
+                env[OwinKeys.RequestScheme] = "http";
+            }
+
+            env[OwinKeys.RequestBody] = _networkStream;
+            env[OwinKeys.CallCancelled] = new CancellationToken();
+            return env;
+        }
+
         internal BufferStream Buffer
         {
             get { return _bufferStream ?? (_bufferStream = new BufferStream());}
         }
 
-        private Task Result(int status, IDictionary<string, string[]> headers, BodyDelegate body)
-        {
-            if (status == 0)
-            {
-                return _networkStream.WriteAsync(_404NotFound, 0, _404NotFound.Length)
-                    .ContinueWith(_ => Dispose());
-            }
-
-            bool contentLengthSet = false;
-
-            var headerBuilder = new StringBuilder("HTTP/1.1 " + status + "\r\n");
-            foreach (var header in headers)
-            {
-                if (header.Key.Equals("Content-Length", StringComparison.InvariantCultureIgnoreCase))
-                {
-                    contentLengthSet = true;
-                }
-                foreach (var value in header.Value)
-                {
-                    headerBuilder.AppendFormat("{0}: {1}\r\n", header.Key, value);
-                }
-            }
-
-            if (body == null)
-            {
-                headerBuilder.Append("\r\n");
-                var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
-                return _networkStream.WriteAsync(bytes, 0, bytes.Length)
-                    .ContinueWith(t => Dispose());
-            }
-
-            if (!contentLengthSet)
-            {
-                return WriteWithBuffer(body, headerBuilder);
-            }
-
-            return WriteUnbuffered(body, headerBuilder);
-        }
-
-        private Task Result(Task<Result> task)
+        private Task Result(Task task, IDictionary<string,object> env)
         {
             if (task.IsFaulted)
             {
@@ -153,25 +109,34 @@ namespace Flux
                     .ContinueWith(_ => Dispose());
             }
 
-            if (task.Result.Item2 == 0 || task.Result.Item2 == 404)
+            int status = env.GetValueOrDefault(OwinKeys.ResponseStatusCode, 0);
+            if (status == 0 || status == 404)
             {
                 return _networkStream.WriteAsync(_404NotFound, 0, _404NotFound.Length)
                     .ContinueWith(_ => Dispose());
             }
 
-            return WriteResult(task.Result.Item1, task.Result.Item2, task.Result.Item3, task.Result.Item4);
+            return WriteResult(status, env);
         }
 
-        private Task WriteResult(IDictionary<string,object> properties, int status, IDictionary<string,string[]> headers, Func<Stream,Task> body)
+        private Task WriteResult(int status, IDictionary<string,object> env)
         {
-            bool contentLengthSet = false;
-
             var headerBuilder = new StringBuilder("HTTP/1.1 " + status + "\r\n");
+
+            var headers = (IDictionary<string,string[]>)env[OwinKeys.ResponseHeaders];
+            if (!headers.ContainsKey("Content-Length"))
+            {
+                headers["Content-Length"] = new[] {Buffer.Length.ToString(CultureInfo.InvariantCulture)};
+            }
             foreach (var header in headers)
             {
-                if (header.Key.Equals("Content-Length", StringComparison.InvariantCultureIgnoreCase))
+                switch (header.Value.Length)
                 {
-                    contentLengthSet = true;
+                    case 0:
+                        continue;
+                    case 1:
+                        headerBuilder.AppendFormat("{0}: {1}\r\n", header.Key, header.Value[0]);
+                        continue;
                 }
                 foreach (var value in header.Value)
                 {
@@ -179,79 +144,37 @@ namespace Flux
                 }
             }
 
-            if (body == null)
-            {
-                headerBuilder.Append("\r\n");
-                var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
-                return _networkStream.WriteAsync(bytes, 0, bytes.Length)
-                    .ContinueWith(t => Dispose());
-            }
-
-            if (!contentLengthSet)
-            {
-                return WriteWithBuffer(body, headerBuilder);
-            }
-
-            return WriteUnbuffered(body, headerBuilder);
+            return WriteResponse(headerBuilder);
         }
 
-        private Task WriteUnbuffered(BodyDelegate body, StringBuilder headerBuilder)
+        private Task WriteResponse(StringBuilder headerBuilder)
         {
             headerBuilder.Append("\r\n");
             var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
-            return _networkStream.WriteAsync(bytes, 0, bytes.Length)
-                .ContinueWith(t =>
-                    {
-                        if (t.IsFaulted || t.IsCanceled)
-                        {
-                            return t;
-                        }
-                        return body(_networkStream)
-                            .ContinueWith(_ => Dispose());
-                    }).Unwrap();
+
+            var task = _networkStream.WriteAsync(bytes, 0, bytes.Length);
+            if (task.IsFaulted || task.IsCanceled) return task;
+            if (Buffer.Length > 0)
+            {
+                task = task.ContinueWith(t => WriteBuffer()).Unwrap();
+            }
+
+            return task;
         }
 
-        private Task WriteWithBuffer(BodyDelegate body, StringBuilder headerBuilder)
+        private Task WriteBuffer()
         {
-            return body(Buffer)
-                .ContinueWith(t =>
-                    {
-                        Buffer.InternalStream.Position = 0;
-                        headerBuilder.AppendFormat("Content-Length: {0}\r\n", Buffer.InternalStream.Length);
-                        headerBuilder.Append("\r\n");
-                        var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
-                        if (!(t.IsFaulted || t.IsCanceled))
-                        {
-                            var writeTask = _networkStream.WriteAsync(bytes, 0, bytes.Length);
-                            if (Buffer.InternalStream.Length > 0)
-                            {
-                                return CopyBufferToNetworkStream(writeTask);
-                            }
-                            return writeTask;
-                        }
-                        Buffer.ForceDispose();
-                        Dispose();
-                        return t;
-                    }).Unwrap();
-        }
-
-        private Task CopyBufferToNetworkStream(Task writeTask)
-        {
-            return writeTask.ContinueWith(t2 =>
+            if (Buffer.Length <= int.MaxValue)
+            {
+                Buffer.Position = 0;
+                byte[] buffer;
+                if (Buffer.TryGetBuffer(out buffer))
                 {
-                    if (!(t2.IsFaulted || t2.IsCanceled))
-                    {
-                        byte[] buffer;
-                        if (Buffer.Length < int.MaxValue && Buffer.TryGetBuffer(out buffer))
-                        {
-                            return _networkStream.WriteAsync(buffer, 0, (int) Buffer.Length)
-                                .ContinueWith(t3 => Dispose());
-                        }
-                        Buffer.InternalStream.CopyTo(_networkStream);
-                    }
-                    Dispose();
-                    return writeTask;
-                }).Unwrap();
+                    return _networkStream.WriteAsync(buffer, 0, (int)Buffer.Length);
+                }
+                Buffer.CopyTo(_networkStream);
+            }
+            return TaskHelper.Completed();
         }
 
         public void Dispose()

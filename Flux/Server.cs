@@ -8,24 +8,7 @@
     using System.Threading.Tasks;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
-        System.Collections.Generic.IDictionary<string, string[]>, // Headers
-        System.IO.Stream, // Body
-        System.Threading.Tasks.Task<System.Tuple< //Result
-            System.Collections.Generic.IDictionary<string, object>, // Properties
-            int, // Status
-            System.Collections.Generic.IDictionary<string, string[]>, // Headers
-            System.Func< // Body
-                System.IO.Stream, // Output
-                System.Threading.Tasks.Task>>>>; // Done
-    using Result = System.Tuple< //Result
-        System.Collections.Generic.IDictionary<string, object>, // Properties
-        int, // Status
-        System.Collections.Generic.IDictionary<string, string[]>, // Headers
-        System.Func< // Body
-            System.IO.Stream, // Output
-            System.Threading.Tasks.Task>>; // Done
-
-    using BodyDelegate = System.Func<System.IO.Stream, System.Threading.Tasks.Task>;
+                System.Threading.Tasks.Task>; // Done
 
     public sealed class Server : IDisposable
     {

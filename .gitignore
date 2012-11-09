@@ -8,3 +8,7 @@ _ReSharper*
 
 *ncrunch*
 *.suo
+build
+nohup.out
+Flux.*.nupkg
+Flux.Test.*.xml
