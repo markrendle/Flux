@@ -33,9 +33,20 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Simple.Web, Version=0.4.2.0, Culture=neutral, processorArchitecture=MSIL">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>..\..\Simple.Web\Simple.Web\bin\Debug\Simple.Web.dll</HintPath>
+    <Reference Include="Inflector">
+      <HintPath>..\packages\Inflector.1.0.0.0\lib\net40\Inflector.dll</HintPath>
+    </Reference>
+    <Reference Include="JsonFx">
+      <HintPath>..\packages\JsonFx.2.0.1106.2610\lib\net40\JsonFx.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web">
+      <HintPath>..\packages\Simple.Web.0.6.0.7\lib\net40\Simple.Web.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.JsonFx">
+      <HintPath>..\packages\Simple.Web.0.6.0.7\lib\net40\Simple.Web.JsonFx.dll</HintPath>
+    </Reference>
+    <Reference Include="Simple.Web.Xml">
+      <HintPath>..\packages\Simple.Web.0.6.0.7\lib\net40\Simple.Web.Xml.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />

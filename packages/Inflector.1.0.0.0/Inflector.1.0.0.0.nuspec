@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>Inflector</id>
+    <version>1.0.0.0</version>
+    <authors>S R Kirkland, Mark Rendle</authors>
+    <owners>Mark Rendle</owners>
+    <licenseUrl>http://www.opensource.org/licenses/mit-license.php</licenseUrl>
+    <projectUrl>http://github.com/markrendle/Inflector</projectUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>A string inflector (plurals, singulars, ordinals, etc.) for .NET.</description>
+    <copyright>S R Kirkland, Mark Rendle</copyright>
+    <tags>inflector, pluralize, singularize</tags>
+  </metadata>
+</package>
