@@ -45,7 +45,7 @@
 
             _app = app;
             _listener.Start();
-            _listener.BeginAcceptTcpClient(Callback, null);
+            _listener.BeginAcceptSocket(Callback, null);
         }
 
         public void Stop()
@@ -64,10 +64,10 @@
 
         private void Callback(IAsyncResult ar)
         {
-            TcpClient socket;
+            Socket socket;
             try
             {
-                socket = _listener.EndAcceptTcpClient(ar);
+                socket = _listener.EndAcceptSocket(ar);
             }
             catch (ObjectDisposedException)
             {
@@ -78,10 +78,9 @@
             instance.Run()
                 .ContinueWith(t =>
                     {
-                        if (t.IsFaulted)
-                        {
-                            Trace.TraceError(t.Exception != null ? t.Exception.Message : "A bad thing happened.");
-                        }
+                        if (!t.IsFaulted) return;
+                        Trace.TraceError(t.Exception != null ? t.Exception.Message : "A bad thing happened.");
+                        instance.TryDispose();
                     });
         }
 

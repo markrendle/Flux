@@ -2,24 +2,28 @@ namespace Flux
 {
     using System;
     using System.IO;
+    using System.Threading;
 
     internal sealed class BufferStream : Stream
     {
-        private readonly Lazy<Stream> _lazyStream = new Lazy<Stream>(() => new MemoryStream()); 
+        private MemoryStream _memoryStream;
 
         internal Stream InternalStream
         {
-            get { return _lazyStream.Value; }
+            get { return _memoryStream
+                ??
+                Interlocked.CompareExchange(ref _memoryStream, new MemoryStream(), null)
+                ??
+                _memoryStream; }
         }
 
-        public BufferStream()
+        public void Reset()
         {
-            _lazyStream = new Lazy<Stream>(() => new MemoryStream());
-        }
-
-        public BufferStream(Stream stream)
-        {
-            _lazyStream = new Lazy<Stream>(() => stream);
+            if (_memoryStream == null) return;
+            var buffer = _memoryStream.GetBuffer();
+            Array.Clear(buffer, 0, buffer.Length);
+            _memoryStream.Position = 0;
+            _memoryStream.SetLength(0);
         }
 
         public override void Flush()
@@ -36,7 +40,7 @@ namespace Flux
         {
             get
             {
-                return _lazyStream.IsValueCreated ? _lazyStream.Value.Length : 0;
+                return _memoryStream == null ? 0 : _memoryStream.Length;
             }
         }
 
@@ -44,7 +48,7 @@ namespace Flux
         {
             get
             {
-                return _lazyStream.IsValueCreated ? _lazyStream.Value.Position : 0;
+                return _memoryStream == null ? 0 : _memoryStream.Position;
             }
             set { InternalStream.Position = value; }
         }
@@ -124,22 +128,18 @@ namespace Flux
 
         internal void ForceDispose()
         {
-            if (_lazyStream.IsValueCreated)
+            if (_memoryStream != null)
             {
-                _lazyStream.Value.Dispose();
+                _memoryStream.Dispose();
             }
         }
 
         internal bool TryGetBuffer(out byte[] buffer)
         {
-            if (_lazyStream.IsValueCreated)
+            if (_memoryStream != null)
             {
-                var memoryStream = InternalStream as MemoryStream;
-                if (memoryStream != null)
-                {
-                    buffer = memoryStream.GetBuffer();
-                    return true;
-                }
+                buffer = _memoryStream.GetBuffer();
+                return true;
             }
             buffer = null;
             return false;

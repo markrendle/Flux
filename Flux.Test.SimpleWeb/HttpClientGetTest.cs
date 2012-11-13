@@ -23,7 +23,24 @@ namespace Flux.Test.SimpleWeb
             }
 
             server.Stop();
-            Assert.Equal("<h1>Pass</h1>", actual);
+            Assert.Equal(Index.Html, actual);
+        }
+
+        [Fact]
+        public void SimpleGetTwiceOnSameConnection()
+        {
+            var server = new Server(3001);
+            server.Start(Application.Run);
+
+            string actual;
+            using (var client = new WebClient())
+            {
+                actual = client.DownloadString("http://localhost:3001/");
+                actual = client.DownloadString("http://localhost:3001/");
+            }
+
+            server.Stop();
+            Assert.Equal(Index.Html, actual);
         }
 
         [Fact]
@@ -50,7 +67,7 @@ namespace Flux.Test.SimpleWeb
             int iteration = 0;
             foreach (var actual in bag)
             {
-                Assert.Equal("<h1>Pass</h1>", actual);
+                Assert.Equal(Index.Html, actual);
             }
         }
         
@@ -77,7 +94,7 @@ namespace Flux.Test.SimpleWeb
             Assert.Equal(count, bag.Count);
             foreach (var actual in bag)
             {
-                Assert.Equal("<h1>Pass</h1>", actual);
+                Assert.Equal(Index.Html, actual);
             }
         }
     }

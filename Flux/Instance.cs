@@ -4,6 +4,7 @@ namespace Flux
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.Globalization;
+    using System.IO;
     using System.Net.Sockets;
     using System.Text;
     using System.Threading;
@@ -15,19 +16,36 @@ namespace Flux
 
     internal sealed class Instance : IDisposable
     {
-        private readonly byte[] _100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
-        private readonly TcpClient _tcpClient;
+        private static readonly byte[] Status100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
+        private static readonly byte[] Status404NotFound = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not found");
+        private static readonly byte[] Status500InternalServerError = Encoding.UTF8.GetBytes("HTTP/1.1 500 Internal Server Error");
+        private readonly Socket _socket;
         private readonly AppFunc _app;
+        private readonly int _timeoutSeconds;
         private readonly NetworkStream _networkStream;
-        private readonly byte[] _404NotFound = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not found");
-        private readonly byte[] _500InternalServerError = Encoding.UTF8.GetBytes("HTTP/1.1 500 Internal Server Error");
+        private readonly TaskCompletionSource<int> _taskCompletionSource = new TaskCompletionSource<int>(); 
+        private readonly Timer _timer;
+        private int _tick = int.MinValue;
+        private bool _disposed;
+
+        private void TimeoutCallback(object state)
+        {
+            if (++_tick > _timeoutSeconds)
+            {
+                Dispose();
+                _taskCompletionSource.SetResult(0);
+            }
+        }
+
         private BufferStream _bufferStream;
 
-        public Instance(TcpClient tcpClient, AppFunc app)
+        public Instance(Socket socket, AppFunc app, int timeoutSeconds = 2)
         {
-            _tcpClient = tcpClient;
-            _networkStream = _tcpClient.GetStream();
+            _socket = socket;
+            _networkStream = new NetworkStream(_socket, FileAccess.ReadWrite, false);
             _app = app;
+            _timeoutSeconds = timeoutSeconds;
+            _timer = new Timer(TimeoutCallback, null, 1000, 1000);
         }
 
         public Task Run()
@@ -44,24 +62,24 @@ namespace Flux
                 {
                     if (expectContinue.Length == 1 && expectContinue[0].Equals("100-Continue", StringComparison.OrdinalIgnoreCase))
                     {
-                        return _networkStream.WriteAsync(_100Continue, 0, _100Continue.Length)
-                            .ContinueWith(t =>
-                                {
-                                    if (t.IsFaulted) return t;
-                                    return _app(env)
-                                        .ContinueWith(t2 => Result(t2, env));
-                                }).Unwrap();
+                        _networkStream.WriteAsync(Status100Continue, 0, Status100Continue.Length)
+                                      .ContinueWith(t =>
+                                                        {
+                                                            if (t.IsFaulted) return t;
+                                                            Buffer.Reset();
+                                                            return _app(env)
+                                                                .ContinueWith(t2 => Result(t2, env));
+                                                        });
                     }
                 }
-                return _app(env)
-                    .ContinueWith(t2 => Result(t2, env));
+                Buffer.Reset();
+                _app(env).ContinueWith(t2 => Result(t2, env));
             }
             catch (Exception ex)
             {
-                var tcs = new TaskCompletionSource<object>();
-                tcs.SetException(ex);
-                return tcs.Task;
+                _taskCompletionSource.SetException(ex);
             }
+            return _taskCompletionSource.Task;
         }
 
         private Dictionary<string, object> CreateEnvironmentDictionary()
@@ -101,22 +119,60 @@ namespace Flux
             get { return _bufferStream ?? (_bufferStream = new BufferStream());}
         }
 
-        private Task Result(Task task, IDictionary<string,object> env)
+        private void Result(Task task, IDictionary<string,object> env)
         {
             if (task.IsFaulted)
             {
-                return _networkStream.WriteAsync(_500InternalServerError, 0, _500InternalServerError.Length)
+                _networkStream.WriteAsync(Status500InternalServerError, 0, Status500InternalServerError.Length)
                     .ContinueWith(_ => Dispose());
             }
 
             int status = env.GetValueOrDefault(OwinKeys.ResponseStatusCode, 0);
             if (status == 0 || status == 404)
             {
-                return _networkStream.WriteAsync(_404NotFound, 0, _404NotFound.Length)
+                _networkStream.WriteAsync(Status404NotFound, 0, Status404NotFound.Length)
                     .ContinueWith(_ => Dispose());
             }
 
-            return WriteResult(status, env);
+            WriteResult(status, env)
+                .ContinueWith(ListenAgain);
+        }
+
+        private void ListenAgain(Task task)
+        {
+            if (task.IsFaulted)
+            {
+                _taskCompletionSource.SetException(task.Exception ?? new Exception("Unknown error."));
+                return;
+            }
+            if (task.IsCanceled)
+            {
+                _taskCompletionSource.SetCanceled();
+                return;
+            }
+            if (_disposed) return;
+            var buffer = new byte[1];
+            _tick = 0;
+            try
+            {
+                _socket.BeginReceive(buffer, 0, 1, SocketFlags.Peek, ListenCallback, null);
+            }
+            catch (ObjectDisposedException)
+            {
+                _timer.Dispose();
+                Dispose();
+            }
+        }
+
+        private void ListenCallback(IAsyncResult ar)
+        {
+            _tick = int.MinValue;
+            if (_disposed) return;
+            int size = _socket.EndReceive(ar);
+            if (size > 0)
+            {
+                Run();
+            }
         }
 
         private Task WriteResult(int status, IDictionary<string,object> env)
@@ -179,14 +235,11 @@ namespace Flux
 
         public void Dispose()
         {
-            try
-            {
-                _tcpClient.Close();
-            }
-            catch(Exception ex)
-            {
-                Trace.TraceError(ex.Message);
-            }
+            if (_disposed) return;
+            _disposed = true;
+            _timer.TryDispose();
+            _networkStream.TryDispose();
+            _socket.TryDispose();
             if (_bufferStream != null)
             {
                 try

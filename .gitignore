@@ -12,3 +12,4 @@ build
 nohup.out
 Flux.*.nupkg
 Flux.Test.*.xml
+*.csproj.user
