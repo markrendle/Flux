@@ -47,14 +47,16 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="App_Packages\HttpHelpers.Sources.0.1.6-alfa\Extensions\CharExtensions.cs" />
+    <Compile Include="App_Packages\HttpHelpers.Sources.0.1.6-alfa\Extensions\StringExtensions.cs" />
+    <Compile Include="App_Packages\HttpHelpers.Sources.0.1.6-alfa\Extensions\StringReaderExtensions.cs" />
+    <Compile Include="App_Packages\HttpHelpers.Sources.0.1.6-alfa\HttpParser.cs" />
+    <Compile Include="App_Packages\HttpHelpers.Sources.0.1.6-alfa\HttpParser.RawParser.cs" />
     <Compile Include="BufferStream.cs" />
     <Compile Include="DictionaryExtensions.cs" />
     <Compile Include="DisposableEx.cs" />
-    <Compile Include="HeaderParser.cs" />
     <Compile Include="InvalidRequestException.cs" />
     <Compile Include="Program.cs" />
-    <Compile Include="RequestLine.cs" />
-    <Compile Include="RequestLineParser.cs" />
     <Compile Include="Server.cs" />
     <Compile Include="Instance.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

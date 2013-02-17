@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/10/nuspec.xsd">
+  <metadata>
+    <id>HttpHelpers.Sources</id>
+    <version>0.1.6-alfa</version>
+    <title>HTTP Helpers</title>
+    <authors>Giacomo Stelluti Scala</authors>
+    <owners>Giacomo Stelluti Scala</owners>
+    <licenseUrl>https://raw.github.com/gsscoder/httphelpers/master/doc/LICENSE</licenseUrl>
+    <projectUrl>https://github.com/gsscoder/httphelpers</projectUrl>
+    <iconUrl>https://raw.github.com/gsscoder/httphelpers/master/HttpHelpers.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>The library exposes an asynchronous HTTP request and response parser.</description>
+    <copyright>2013 Giacomo Stelluti Scala</copyright>
+    <tags>HTTP Message Request Response Parser Helpers</tags>
+    <references />
+  </metadata>
+</package>
