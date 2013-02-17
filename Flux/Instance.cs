@@ -1,3 +1,6 @@
+using System.Collections;
+using HttpHelpers;
+
 namespace Flux
 {
     using System;
@@ -53,8 +56,7 @@ namespace Flux
             try
             {
                 var env = CreateEnvironmentDictionary();
-                var headers = HeaderParser.Parse(_networkStream);
-                env[OwinKeys.RequestHeaders] = headers;
+                var headers = (IDictionary<string, string[]>)env[OwinKeys.RequestHeaders];
                 env[OwinKeys.ResponseHeaders] = new Dictionary<string, string[]>();
                 env[OwinKeys.ResponseBody] = Buffer;
                 string[] expectContinue;
@@ -88,13 +90,25 @@ namespace Flux
                           {
                               {OwinKeys.Version, "0.8"}
                           };
-            var requestLine = RequestLineParser.Parse(_networkStream);
-            env[OwinKeys.RequestMethod] = requestLine.Method;
+            var readUri = string.Empty;
+            IDictionary<string, string[]> headers = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+            HttpParser.ParseMessage(_networkStream, (method, uri, version) =>
+                {
+                    env[OwinKeys.RequestMethod] = method;
+                    readUri = uri;
+                    env[OwinKeys.RequestProtocol] = version;
+                },
+                (header, value) =>
+                    // REMARKS: previous implementation created one entry each new line, instead Owin spec say:
+                    // (1) all header value in a single entry, (2) one entry for each value by comma, (3) a mix of these
+                    headers.Add(header, new[] {value})
+                );
+            env[OwinKeys.RequestHeaders] = headers;
             env[OwinKeys.RequestPathBase] = string.Empty;
-            if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
+            if (readUri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
             {
                 Uri uri;
-                if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
+                if (Uri.TryCreate(readUri, UriKind.Absolute, out uri))
                 {
                     env[OwinKeys.RequestPath] = uri.AbsolutePath;
                     env[OwinKeys.RequestQueryString] = uri.Query;
@@ -103,7 +117,7 @@ namespace Flux
             }
             else
             {
-                var splitUri = requestLine.Uri.Split('?');
+                var splitUri = readUri.Split('?');
                 env[OwinKeys.RequestPath] = splitUri[0];
                 env[OwinKeys.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
                 env[OwinKeys.RequestScheme] = "http";
