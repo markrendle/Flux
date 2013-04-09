@@ -18,5 +18,7 @@
   </metadata>
   <files>
     <file src="..\..\build\Flux.exe" target="lib\net40" />
+    <file src="..\..\build\Flux.*db" target="lib\net40" />
+    <file src="..\..\src\Flux\**\*.cs" target="src" />
   </files>
 </package>
