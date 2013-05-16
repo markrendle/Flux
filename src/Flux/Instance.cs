@@ -27,6 +27,8 @@ namespace Flux
         private readonly Timer _timer;
         private int _tick = int.MinValue;
         private bool _disposed;
+        private bool _isHttp10;
+        private bool _keepAlive;
 
         private void TimeoutCallback(object state)
         {
@@ -54,6 +56,7 @@ namespace Flux
             {
                 var env = CreateEnvironmentDictionary();
                 var headers = HeaderParser.Parse(_networkStream);
+                CheckKeepAlive(headers);
                 env[OwinKeys.RequestHeaders] = headers;
                 env[OwinKeys.ResponseHeaders] = new Dictionary<string, string[]>();
                 env[OwinKeys.ResponseBody] = Buffer;
@@ -82,6 +85,24 @@ namespace Flux
             return _taskCompletionSource.Task;
         }
 
+        void CheckKeepAlive(IDictionary<string, string[]> headers)
+        {
+            if (!_isHttp10)
+            {
+                _keepAlive = true;
+                return;
+            }
+            _keepAlive = false;
+            string[] connectionValues;
+            if (headers.TryGetValue("Connection", out connectionValues))
+            {
+                if (connectionValues.Length == 1 && connectionValues[0].Equals("Keep-Alive", StringComparison.OrdinalIgnoreCase))
+                {
+                    _keepAlive = true;
+                }
+            }
+        }
+
         private Dictionary<string, object> CreateEnvironmentDictionary()
         {
             var env = new Dictionary<string, object>
@@ -89,6 +110,7 @@ namespace Flux
                               {OwinKeys.Version, "0.8"}
                           };
             var requestLine = RequestLineParser.Parse(_networkStream);
+            _isHttp10 = requestLine.HttpVersion.EndsWith("/1.0");
             env[OwinKeys.RequestMethod] = requestLine.Method;
             env[OwinKeys.RequestPathBase] = string.Empty;
             if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
@@ -151,6 +173,12 @@ namespace Flux
                 return;
             }
             if (_disposed) return;
+            if (!_keepAlive)
+            {
+                _timer.Dispose();
+                Dispose();
+                return;
+            }
             var buffer = new byte[1];
             _tick = 0;
             try
@@ -177,12 +205,17 @@ namespace Flux
 
         private Task WriteResult(int status, IDictionary<string,object> env)
         {
-            var headerBuilder = new StringBuilder("HTTP/1.1 " + status + "\r\n");
+            var headerBuilder = new StringBuilder();
+            headerBuilder.Append(_isHttp10 ? "HTTP/1.0 " : "HTTP/1.1 ").Append(status).Append("\r\n");
 
             var headers = (IDictionary<string,string[]>)env[OwinKeys.ResponseHeaders];
             if (!headers.ContainsKey("Content-Length"))
             {
                 headers["Content-Length"] = new[] {Buffer.Length.ToString(CultureInfo.InvariantCulture)};
+            }
+            if (_isHttp10 && _keepAlive)
+            {
+                headers["Connection"] = new[] { "Keep-Alive" };
             }
             foreach (var header in headers)
             {
