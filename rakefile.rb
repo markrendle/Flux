@@ -65,7 +65,7 @@ require 'rake/clean'
 require 'rexml/document'
 
 # Check dependencies
-raise "You do not have the required dependencies, run '.\\InstallGem.bat' or './installgem.sh'." \
+raise "You do not have the required dependencies, run '.\\InstallGems.bat' or './installgems.sh'." \
     unless `bundle check`.include? "The Gemfile's dependencies are satisfied\n"
 
 # Configure albacore
