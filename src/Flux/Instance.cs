@@ -9,7 +9,6 @@ namespace Flux
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
-    using Fix;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
         System.Threading.Tasks.Task>; // Completion
@@ -52,9 +51,10 @@ namespace Flux
 
         public Task Run()
         {
+            var cts = new CancellationTokenSource();
             try
             {
-                var env = CreateEnvironmentDictionary();
+                var env = CreateEnvironmentDictionary(cts.Token);
                 var headers = HeaderParser.Parse(_networkStream);
                 CheckKeepAlive(headers);
                 env[OwinKeys.RequestHeaders] = headers;
@@ -68,18 +68,23 @@ namespace Flux
                         _networkStream.WriteAsync(Status100Continue, 0, Status100Continue.Length)
                                       .ContinueWith(t =>
                                                         {
-                                                            if (t.IsFaulted) return t;
+                                                            if (t.IsFaulted)
+                                                            {
+                                                                cts.Cancel();
+                                                                return t;
+                                                            }
                                                             Buffer.Reset();
                                                             return _app(env)
-                                                                .ContinueWith(t2 => Result(t2, env));
-                                                        });
+                                                                .ContinueWith(t2 => Result(t2, env), cts.Token);
+                                                        }, cts.Token);
                     }
                 }
                 Buffer.Reset();
-                _app(env).ContinueWith(t2 => Result(t2, env));
+                _app(env).ContinueWith(t2 => Result(t2, env), cts.Token);
             }
             catch (Exception ex)
             {
+                cts.Cancel();
                 _taskCompletionSource.SetException(ex);
             }
             return _taskCompletionSource.Task;
@@ -103,11 +108,11 @@ namespace Flux
             }
         }
 
-        private Dictionary<string, object> CreateEnvironmentDictionary()
+        private Dictionary<string, object> CreateEnvironmentDictionary(CancellationToken token)
         {
             var env = new Dictionary<string, object>
                           {
-                              {OwinKeys.Version, "0.8"}
+                              {OwinKeys.Version, "1.0"}
                           };
             var requestLine = RequestLineParser.Parse(_networkStream);
             _isHttp10 = requestLine.HttpVersion.EndsWith("/1.0");
@@ -132,7 +137,7 @@ namespace Flux
             }
 
             env[OwinKeys.RequestBody] = _networkStream;
-            env[OwinKeys.CallCancelled] = new CancellationToken();
+            env[OwinKeys.CallCancelled] = token;
             return env;
         }
 

@@ -11,13 +11,11 @@
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>A lightweight web server.</description>
     <summary>A lightweight web server.</summary>
-    <tags>fix owin http</tags>
-    <dependencies>
-      <dependency id="Fix" version="0.3" />
-    </dependencies>
+    <tags>owin http webserver</tags>
   </metadata>
   <files>
-    <file src="..\..\build\Flux.exe" target="lib\net40" />
+    <file src="..\..\build\Flux.dll" target="lib\net40" />
+    <file src="..\..\build\Flux.xml" target="lib\net40" />
     <file src="..\..\build\Flux.*db" target="lib\net40" />
     <file src="..\..\src\Flux\**\*.cs" target="src" />
   </files>

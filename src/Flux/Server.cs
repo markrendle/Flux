@@ -41,7 +41,7 @@
 
         public void Start(AppFunc app)
         {
-            if (0 != Interlocked.CompareExchange(ref _started, 1, 0)) throw new InvalidOperationException("Server is already started.");
+            if (1 != Interlocked.Increment(ref _started)) throw new InvalidOperationException("Server is already started.");
 
             _app = app;
             _listener.Start();
@@ -51,7 +51,7 @@
         public void Stop()
         {
             if (_started == 0) return;
-            if (0 != Interlocked.CompareExchange(ref _stopped, 1, 0)) return;
+            if (1 != Interlocked.Increment(ref _stopped)) return;
             try
             {
                 _listener.Stop();
