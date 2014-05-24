@@ -5,7 +5,6 @@
     using System.Net;
     using System.Net.Sockets;
     using System.Threading;
-    using System.Threading.Tasks;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
                 System.Threading.Tasks.Task>; // Done
@@ -17,6 +16,8 @@
         private readonly TcpListener _listener;
         private readonly IPAddress _ipAddress;
         private readonly int _port;
+        private readonly DataPool _dataPool;
+        private readonly TcpServer _tcpServer;
         private int _started;
         private int _stopped;
 
@@ -29,14 +30,8 @@
         {
             _ipAddress = ipAddress;
             _port = port;
-            _listener = new TcpListener(_ipAddress, _port);
-            TaskScheduler.UnobservedTaskException += TaskSchedulerOnUnobservedTaskException;
-        }
-
-        private void TaskSchedulerOnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs unobservedTaskExceptionEventArgs)
-        {
-            Trace.TraceError(unobservedTaskExceptionEventArgs.Exception.Message);
-            unobservedTaskExceptionEventArgs.SetObserved();
+            _dataPool = new DataPool();
+            _tcpServer = new TcpServer(ipAddress, port, _dataPool, TcpServerCallback);
         }
 
         public void Start(AppFunc app)
@@ -44,6 +39,7 @@
             if (1 != Interlocked.Increment(ref _started)) throw new InvalidOperationException("Server is already started.");
 
             _app = app;
+            _tcpServer.Start();
             _listener.Start();
             _listener.BeginAcceptSocket(Callback, null);
         }
@@ -54,12 +50,17 @@
             if (1 != Interlocked.Increment(ref _stopped)) return;
             try
             {
-                _listener.Stop();
+                _tcpServer.Stop();
             }
             catch (Exception ex)
             {
                 Trace.WriteLine(ex.Message);
             }
+        }
+
+        private void TcpServerCallback(Socket socket, int pointer)
+        {
+            
         }
 
         private void Callback(IAsyncResult ar)
@@ -87,6 +88,7 @@
         public void Dispose()
         {
             Stop();
+            _dataPool.Dispose();
         }
     }
 }

@@ -8,6 +8,8 @@ using Xunit;
 
 namespace Flux.Owin.Tests
 {
+    using System.Threading;
+
     public class FluxEnvironmentTest
     {
         private static readonly Socket DummySocket = new Socket(SocketType.Raw, ProtocolType.Tcp);
@@ -17,22 +19,41 @@ namespace Flux.Owin.Tests
         [Fact]
         public void GetsMethod()
         {
-            var env = new FluxEnvironment(DummySocket, SimpleRequest, 0, SimpleRequest.Length - 1);
+            var env = CreateEnv(SimpleRequest);
             Assert.Equal("GET", env[OwinKeys.RequestMethod]);
+        }
+
+        private static FluxEnvironment CreateEnv(byte[] request)
+        {
+            return new FluxEnvironment(DummySocket, request, 0, request.Length - 1, request.Length, RequestScheme.Http, CancellationToken.None);
         }
 
         [Fact]
         public void GetsPathForPlainRequest()
         {
-            var env = new FluxEnvironment(DummySocket, SimpleRequest, 0, SimpleRequest.Length - 1);
+            var env = CreateEnv(SimpleRequest);
             Assert.Equal("/", env[OwinKeys.RequestPath]);
         }
 
         [Fact]
         public void GetsPathForRequestWithQueryString()
         {
-            var env = new FluxEnvironment(DummySocket, LessSimpleRequest, 0, LessSimpleRequest.Length - 1);
+            var env = CreateEnv(LessSimpleRequest);
             Assert.Equal("/home", env[OwinKeys.RequestPath]);
+        }
+
+        [Fact]
+        public void GetsProtocolForPlainRequest()
+        {
+            var env = CreateEnv(SimpleRequest);
+            Assert.Equal("HTTP/1.1", env[OwinKeys.RequestProtocol]);
+        }
+
+        [Fact]
+        public void GetsProtocolForRequestWithQueryString()
+        {
+            var env = CreateEnv(LessSimpleRequest);
+            Assert.Equal("HTTP/1.1", env[OwinKeys.RequestProtocol]);
         }
     }
 }

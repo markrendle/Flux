@@ -1,5 +1,10 @@
 namespace Flux
 {
+    using System;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Reflection;
+
     public static class OwinKeys
     {
         public const string CallCompleted = "owin.CallCompleted";
@@ -21,6 +26,21 @@ namespace Flux
 
         public const string Version = "owin.Version";
         public const string CallCancelled = "owin.CallCancelled";
+
+        private static readonly Lazy<HashSet<string>> LazyKeys = new Lazy<HashSet<string>>(CreateKeySet);
+
+        public static HashSet<string> Keys
+        {
+            get { return LazyKeys.Value; }
+        }
+
+        private static HashSet<string> CreateKeySet()
+        {
+            return
+                new HashSet<string>(
+                    typeof (OwinKeys).GetFields(BindingFlags.Public | BindingFlags.Static)
+                        .Select(f => (string) f.GetValue(null)));
+        }
     }
 
     public static class ServerKeys

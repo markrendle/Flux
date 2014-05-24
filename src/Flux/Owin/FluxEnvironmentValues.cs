@@ -11,44 +11,62 @@ namespace Flux.Owin
     {
         private const byte Space = (byte) ' ';
         private const byte QuestionMark = (byte) '?';
-        private string _requestScheme;
-        private string _requestMethod;
-        private string _requestPathBase;
-        private string _requestPath;
-        private string _requestQueryString;
-        private string _requestProtocol;
+        private const byte Slash = (byte) '/';
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private object Get(string key)
+        private void ParseKey(string key)
         {
             switch (key)
             {
                 case OwinKeys.RequestMethod:
-                    return _requestMethod ?? GetMethod();
                 case OwinKeys.RequestPath:
-                    return _requestPath ?? GetPath();
+                case OwinKeys.RequestQueryString:
+                case OwinKeys.RequestProtocol:
+                    ParseRequestLine();
+                    break;
                 default:
                     throw new KeyNotFoundException();
             }
         }
 
-        private string GetPath()
+        private void ParseRequestLine()
         {
-            int start = Array.IndexOf(_buffer, Space, _offset) + 1;
-            int end = Array.IndexOf(_buffer, QuestionMark, start, _requestLineCount);
-            if (end < 0)
+            lock (_syncRoot)
             {
-                end = Array.IndexOf(_buffer, Space, start, _requestLineCount);
-            }
+                if (_internal.ContainsKey(OwinKeys.RequestMethod)) return;
+                _internal.Add(OwinKeys.RequestPathBase, string.Empty);
 
-            return _requestPath = Encoding.UTF8.GetString(_buffer, start, end - start);
+                int nextSpace = NextSpace(_offset);
+                _internal.Add(OwinKeys.RequestMethod, Encoding.UTF8.GetString(_buffer, _offset, nextSpace - _offset));
+                int start = nextSpace + 1;
+                nextSpace = NextSpace(start);
+                int questionMark = Array.IndexOf(_buffer, QuestionMark, start, _requestLineCount);
+                if (questionMark > 0)
+                {
+                    _internal.Add(OwinKeys.RequestPath, Encoding.UTF8.GetString(_buffer, start, questionMark - start));
+                    _internal.Add(OwinKeys.RequestQueryString, Encoding.UTF8.GetString(_buffer, questionMark, nextSpace - questionMark));
+                }
+                else
+                {
+                    _internal.Add(OwinKeys.RequestPath, Encoding.UTF8.GetString(_buffer, start, nextSpace - start));
+                    _internal.Add(OwinKeys.RequestQueryString, string.Empty);
+                }
+                start = nextSpace + 1;
+                int newline = NextNewline(start);
+                _internal.Add(OwinKeys.RequestProtocol, Encoding.UTF8.GetString(_buffer, start, newline - start));
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private string GetMethod()
+        private int NextSpace(int startIndex)
         {
-            int space = Array.IndexOf(_buffer, Space, _offset);
-            return _requestMethod = Encoding.UTF8.GetString(_buffer, _offset, space - _offset);
+            return Array.IndexOf(_buffer, Space, startIndex, _bufferLength - startIndex);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private int NextNewline(int startIndex)
+        {
+            return Array.IndexOf(_buffer, NewLine, startIndex, _bufferLength - startIndex);
         }
     }
 }

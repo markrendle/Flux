@@ -51,7 +51,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Buffer.cs" />
+    <Compile Include="DataPool.cs" />
     <Compile Include="BufferStream.cs" />
     <Compile Include="DictionaryExtensions.cs" />
     <Compile Include="DisposableEx.cs" />
@@ -62,6 +62,7 @@
     <Compile Include="Owin\OwinKeys.cs" />
     <Compile Include="RequestLine.cs" />
     <Compile Include="RequestLineParser.cs" />
+    <Compile Include="RequestScheme.cs" />
     <Compile Include="Server.cs" />
     <Compile Include="Instance.cs" />
     <Compile Include="StreamExtensions.cs" />
