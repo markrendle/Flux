@@ -25,7 +25,8 @@ namespace Flux.Owin.Tests
 
         private static FluxEnvironment CreateEnv(byte[] request)
         {
-            return new FluxEnvironment(DummySocket, request, 0, request.Length - 1, request.Length, RequestScheme.Http, CancellationToken.None);
+            var segment = new ArraySegment<byte>(request, 0, request.Length);
+            return new FluxEnvironment(DummySocket, segment, RequestScheme.Http, CancellationToken.None);
         }
 
         [Fact]

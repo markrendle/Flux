@@ -4,32 +4,30 @@
     using System.Diagnostics;
     using System.Net;
     using System.Net.Sockets;
+    using System.Runtime.Serialization;
+    using System.Text;
     using System.Threading;
+    using Owin;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
                 System.Threading.Tasks.Task>; // Done
 
-    public sealed class Server : IDisposable
+    public sealed class FluxServer : IDisposable
     {
         private AppFunc _app;
         private static readonly IPAddress Localhost = new IPAddress(new byte[] { 0, 0, 0, 0 });
-        private readonly TcpListener _listener;
-        private readonly IPAddress _ipAddress;
-        private readonly int _port;
         private readonly DataPool _dataPool;
         private readonly TcpServer _tcpServer;
         private int _started;
         private int _stopped;
 
-        public Server(int port)
+        public FluxServer(int port)
             : this(Localhost, port)
         {
         }
 
-        public Server(IPAddress ipAddress, int port)
+        public FluxServer(IPAddress ipAddress, int port)
         {
-            _ipAddress = ipAddress;
-            _port = port;
             _dataPool = new DataPool();
             _tcpServer = new TcpServer(ipAddress, port, _dataPool, TcpServerCallback);
         }
@@ -40,8 +38,6 @@
 
             _app = app;
             _tcpServer.Start();
-            _listener.Start();
-            _listener.BeginAcceptSocket(Callback, null);
         }
 
         public void Stop()
@@ -58,31 +54,28 @@
             }
         }
 
-        private void TcpServerCallback(Socket socket, int pointer)
+        private void TcpServerCallback(Socket socket, ArraySegment<byte> segment)
         {
-            
+            var cancellation = new CancellationTokenSource();
+            var env = new FluxEnvironment(socket, segment, RequestScheme.Http, cancellation.Token);
+            _app(env).ContinueWith(t =>
+            {
+                var buffer = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\n\r\n");
+                socket.BeginSend(buffer, 0, buffer.Length, SocketFlags.None, Sent, socket);
+            }, cancellation.Token);
         }
 
-        private void Callback(IAsyncResult ar)
+        private void Sent(IAsyncResult ar)
         {
-            Socket socket;
-            try
-            {
-                socket = _listener.EndAcceptSocket(ar);
-            }
-            catch (ObjectDisposedException)
-            {
-                return;
-            }
-            _listener.BeginAcceptSocket(Callback, null);
-            var instance = new Instance(socket, _app);
-            instance.Run()
-                .ContinueWith(t =>
-                    {
-                        if (!t.IsFaulted) return;
-                        Trace.TraceError(t.Exception != null ? t.Exception.Message : "A bad thing happened.");
-                        instance.TryDispose();
-                    });
+            var socket = (Socket) ar.AsyncState;
+            int sent = socket.EndSend(ar);
+            socket.BeginDisconnect(false, Disconnected, socket);
+        }
+
+        private void Disconnected(IAsyncResult ar)
+        {
+            var socket = (Socket) ar.AsyncState;
+            socket.EndDisconnect(ar);
         }
 
         public void Dispose()

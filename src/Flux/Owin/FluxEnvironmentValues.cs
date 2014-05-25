@@ -36,37 +36,37 @@ namespace Flux.Owin
                 if (_internal.ContainsKey(OwinKeys.RequestMethod)) return;
                 _internal.Add(OwinKeys.RequestPathBase, string.Empty);
 
-                int nextSpace = NextSpace(_offset);
-                _internal.Add(OwinKeys.RequestMethod, Encoding.UTF8.GetString(_buffer, _offset, nextSpace - _offset));
+                int nextSpace = NextSpace(_data.Offset);
+                _internal.Add(OwinKeys.RequestMethod, Encoding.UTF8.GetString(_data.Array, _data.Offset, nextSpace - _data.Offset));
                 int start = nextSpace + 1;
                 nextSpace = NextSpace(start);
-                int questionMark = Array.IndexOf(_buffer, QuestionMark, start, _requestLineCount);
+                int questionMark = Array.IndexOf(_data.Array, QuestionMark, start, _requestLineCount);
                 if (questionMark > 0)
                 {
-                    _internal.Add(OwinKeys.RequestPath, Encoding.UTF8.GetString(_buffer, start, questionMark - start));
-                    _internal.Add(OwinKeys.RequestQueryString, Encoding.UTF8.GetString(_buffer, questionMark, nextSpace - questionMark));
+                    _internal.Add(OwinKeys.RequestPath, Encoding.UTF8.GetString(_data.Array, start, questionMark - start));
+                    _internal.Add(OwinKeys.RequestQueryString, Encoding.UTF8.GetString(_data.Array, questionMark, nextSpace - questionMark));
                 }
                 else
                 {
-                    _internal.Add(OwinKeys.RequestPath, Encoding.UTF8.GetString(_buffer, start, nextSpace - start));
+                    _internal.Add(OwinKeys.RequestPath, Encoding.UTF8.GetString(_data.Array, start, nextSpace - start));
                     _internal.Add(OwinKeys.RequestQueryString, string.Empty);
                 }
                 start = nextSpace + 1;
                 int newline = NextNewline(start);
-                _internal.Add(OwinKeys.RequestProtocol, Encoding.UTF8.GetString(_buffer, start, newline - start));
+                _internal.Add(OwinKeys.RequestProtocol, Encoding.UTF8.GetString(_data.Array, start, newline - start));
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int NextSpace(int startIndex)
         {
-            return Array.IndexOf(_buffer, Space, startIndex, _bufferLength - startIndex);
+            return Array.IndexOf(_data.Array, Space, startIndex, _data.Count - startIndex);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private int NextNewline(int startIndex)
         {
-            return Array.IndexOf(_buffer, NewLine, startIndex, _bufferLength - startIndex);
+            return Array.IndexOf(_data.Array, NewLine, startIndex, _data.Count - startIndex);
         }
     }
 }

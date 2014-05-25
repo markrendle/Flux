@@ -3,6 +3,7 @@
 namespace Flux
 {
     using System;
+    using System.Diagnostics;
     using System.Net;
     using System.Net.Sockets;
 
@@ -14,7 +15,7 @@ namespace Flux
         private static readonly IPAddress Localhost = new IPAddress(new byte[] { 0, 0, 0, 0 });
         private readonly Socket _listener;
         private readonly DataPool _dataPool;
-        private readonly Action<Socket, int> _callback;
+        private readonly Action<Socket, ArraySegment<byte>> _callback;
         private int _started;
         private int _stopped;
         private readonly IPEndPoint _endpoint;
@@ -25,7 +26,8 @@ namespace Flux
         /// <param name="port">The port to listen on.</param>
         /// <param name="bot">The Buffer object.</param>
         /// <param name="callback">Action to call with new connections.</param>
-        public TcpServer(DataPool bot, Action<Socket, int> callback) : this(5875, bot, callback)
+        public TcpServer(DataPool bot, Action<Socket, ArraySegment<byte>> callback)
+            : this(5875, bot, callback)
         {
         }
 
@@ -35,7 +37,8 @@ namespace Flux
         /// <param name="port">The port to listen on.</param>
         /// <param name="bot">The Buffer object.</param>
         /// <param name="callback">Action to call with new connections.</param>
-        public TcpServer(int port, DataPool bot, Action<Socket, int> callback) : this(Localhost, port, bot, callback)
+        public TcpServer(int port, DataPool bot, Action<Socket, ArraySegment<byte>> callback)
+            : this(Localhost, port, bot, callback)
         {
         }
 
@@ -46,7 +49,7 @@ namespace Flux
         /// <param name="port">The port to listen on.</param>
         /// <param name="dataPool">The Buffer object.</param>
         /// <param name="callback">Action to call with new connections.</param>
-        public TcpServer(IPAddress ipAddress, int port, DataPool dataPool, Action<Socket, int> callback)
+        public TcpServer(IPAddress ipAddress, int port, DataPool dataPool, Action<Socket, ArraySegment<byte>> callback)
         {
             if (dataPool == null) throw new ArgumentNullException("dataPool");
             if (callback == null) throw new ArgumentNullException("callback");
@@ -83,7 +86,9 @@ namespace Flux
         private void Received(IAsyncResult ar)
         {
             var socketInfo = (SocketInfo) ar.AsyncState;
-            _callback(socketInfo.Socket, socketInfo.Pointer);
+            int size = socketInfo.Socket.EndReceive(ar);
+            var segment = new ArraySegment<byte>(_dataPool.Buffer, socketInfo.Pointer, size);
+            _callback(socketInfo.Socket, segment);
         }
 
         private class SocketInfo
@@ -100,7 +105,8 @@ namespace Flux
 
         public void Stop()
         {
-            throw new NotImplementedException();
+            Trace.WriteLine("Stopped");
+            _listener.Shutdown(SocketShutdown.Both);
         }
     }
 }

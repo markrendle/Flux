@@ -12,25 +12,17 @@ namespace Flux.Owin
     {
         private const byte NewLine = (byte) '\n';
         private readonly Socket _socket;
-        private readonly byte[] _buffer;
-        private readonly int _offset;
+        private readonly ArraySegment<byte> _data;
         private readonly int _requestLineCount;
-        private readonly int _headerBlockLength;
-        private readonly int _bufferLength;
-        private readonly RequestScheme _requestScheme;
         private readonly IDictionary<string, object> _internal = new Dictionary<string, object>();
         private readonly object _syncRoot;
 
-        public FluxEnvironment(Socket socket, byte[] buffer, int offset, int headerBlockLength, int bufferLength, RequestScheme requestScheme, CancellationToken callCancellationToken)
+        public FluxEnvironment(Socket socket, ArraySegment<byte> data, RequestScheme requestScheme, CancellationToken callCancellationToken)
         {
             _socket = socket;
-            _buffer = buffer;
-            _offset = offset;
-            _requestLineCount = Array.IndexOf(_buffer, NewLine, _offset) - _offset;
-            _headerBlockLength = headerBlockLength;
-            _bufferLength = bufferLength;
-            _requestScheme = requestScheme;
-            _internal = new Dictionary<string, object>
+            _data = data;
+            _requestLineCount = Array.IndexOf(data.Array, NewLine, data.Offset, data.Count) - data.Offset;
+            _internal = new Dictionary<string, object>(32)
             {
                 {OwinKeys.Version, "1.0"},
                 {OwinKeys.CallCancelled, callCancellationToken},
