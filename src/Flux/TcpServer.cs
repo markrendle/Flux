@@ -15,6 +15,7 @@ namespace Flux
     {
         private static readonly IPAddress Localhost = new IPAddress(new byte[] { 0, 0, 0, 0 });
         private readonly Socket _listener;
+        private ConnectionPool _connectionPool;
         private readonly DataPool _dataPool;
         private readonly SaeaPool _saeaPool;
         private readonly Action<Socket, ArraySegment<byte>> _callback;
@@ -56,11 +57,10 @@ namespace Flux
             if (dataPool == null) throw new ArgumentNullException("dataPool");
             if (callback == null) throw new ArgumentNullException("callback");
             _dataPool = dataPool;
-            _saeaPool = SaeaPool.Create(16);
+            _saeaPool = SaeaPool.Create(1024);
             _callback = callback;
             _endpoint = new IPEndPoint(ipAddress, port);
             _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            //_bot = new BufferBot(1024 * 1024, 1024);
         }
 
         /// <summary>
@@ -74,22 +74,39 @@ namespace Flux
             }
             _listener.Bind(_endpoint);
             _listener.Listen(100);
-            var saea = _saeaPool.Get();
-            saea.Completed += SaeaOnAccepted;
-            if (!_listener.AcceptAsync(saea))
+            var acceptArgs = _saeaPool.Get();
+            acceptArgs.Completed += AcceptArgsOnCompleted;
+            if (!_listener.AcceptAsync(acceptArgs))
             {
-                Accepted(saea);
+                Accepted(acceptArgs);
             }
         }
 
-        private void SaeaOnAccepted(object sender, SocketAsyncEventArgs socketAsyncEventArgs)
+        private void AcceptArgsOnCompleted(object sender, SocketAsyncEventArgs socketAsyncEventArgs)
         {
             Accepted(socketAsyncEventArgs);
         }
 
-        private void Accepted(SocketAsyncEventArgs saea)
+        private void Accepted(SocketAsyncEventArgs acceptArgs)
         {
-            
+            acceptArgs.Completed -= AcceptArgsOnCompleted;
+            var socket = acceptArgs.AcceptSocket;
+            var receiveArgs = _saeaPool.Get();
+            receiveArgs.Completed += ReceiveArgsOnCompleted;
+            if (!socket.ReceiveAsync(receiveArgs))
+            {
+                Received(receiveArgs);
+            }
+        }
+
+        private void ReceiveArgsOnCompleted(object sender, SocketAsyncEventArgs socketAsyncEventArgs)
+        {
+            throw new NotImplementedException();
+        }
+
+        private void Received(SocketAsyncEventArgs receiveArgs)
+        {
+            receiveArgs.Completed -= ReceiveArgsOnCompleted;
         }
 
         private void Accepted(IAsyncResult ar)

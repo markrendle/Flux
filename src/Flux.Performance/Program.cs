@@ -15,11 +15,12 @@ namespace Flux.Performance
         private static readonly ManualResetEvent ExitEvent = new ManualResetEvent(false);
         static void Main(string[] args)
         {
-            Console.CancelKeyPress += ConsoleOnCancelKeyPress;
             var tcs = new TaskCompletionSource<object>();
             tcs.SetResult(null);
             CompletedTask = tcs.Task;
-            using (var server = new FluxServer(3589))
+            var server = new FluxServer(3589);
+            Console.WriteLine("Server created...");
+            using (server)
             {
                 server.Start(App);
                 Console.WriteLine("FluxServer listening on port 3589...");
