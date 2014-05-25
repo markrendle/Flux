@@ -23,7 +23,8 @@ namespace Flux.Performance
             {
                 server.Start(App);
                 Console.WriteLine("FluxServer listening on port 3589...");
-                ExitEvent.WaitOne();
+                Console.WriteLine("Press Escape to stop.");
+                Console.ReadKey();
                 server.Stop();
             }
         }

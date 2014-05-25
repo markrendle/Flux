@@ -65,6 +65,7 @@
     <Compile Include="RequestScheme.cs" />
     <Compile Include="FluxServer.cs" />
     <Compile Include="Instance.cs" />
+    <Compile Include="Saea\SaeaPool.cs" />
     <Compile Include="StreamExtensions.cs" />
     <Compile Include="TaskHelper.cs" />
     <Compile Include="TcpServer.cs" />

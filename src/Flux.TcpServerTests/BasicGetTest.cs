@@ -13,10 +13,10 @@ namespace Flux.TcpServerTests
     using System.Threading;
     using Xunit;
 
-    public class Class1
+    public class BasicGetTest
     {
         [Fact]
-        public void Test1()
+        public void GetReturnsOk()
         {
             bool done = false;
             HttpStatusCode statusCode = default(HttpStatusCode);

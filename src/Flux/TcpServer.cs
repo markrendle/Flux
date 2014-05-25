@@ -1,4 +1,5 @@
 ﻿using System.Threading;
+using Flux.Saea;
 
 namespace Flux
 {
@@ -15,6 +16,7 @@ namespace Flux
         private static readonly IPAddress Localhost = new IPAddress(new byte[] { 0, 0, 0, 0 });
         private readonly Socket _listener;
         private readonly DataPool _dataPool;
+        private readonly SaeaPool _saeaPool;
         private readonly Action<Socket, ArraySegment<byte>> _callback;
         private int _started;
         private int _stopped;
@@ -54,6 +56,7 @@ namespace Flux
             if (dataPool == null) throw new ArgumentNullException("dataPool");
             if (callback == null) throw new ArgumentNullException("callback");
             _dataPool = dataPool;
+            _saeaPool = SaeaPool.Create(16);
             _callback = callback;
             _endpoint = new IPEndPoint(ipAddress, port);
             _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -71,7 +74,22 @@ namespace Flux
             }
             _listener.Bind(_endpoint);
             _listener.Listen(100);
-            _listener.BeginAccept(Accepted, null);
+            var saea = _saeaPool.Get();
+            saea.Completed += SaeaOnAccepted;
+            if (!_listener.AcceptAsync(saea))
+            {
+                Accepted(saea);
+            }
+        }
+
+        private void SaeaOnAccepted(object sender, SocketAsyncEventArgs socketAsyncEventArgs)
+        {
+            Accepted(socketAsyncEventArgs);
+        }
+
+        private void Accepted(SocketAsyncEventArgs saea)
+        {
+            
         }
 
         private void Accepted(IAsyncResult ar)

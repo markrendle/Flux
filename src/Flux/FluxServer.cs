@@ -60,6 +60,7 @@
             var env = new FluxEnvironment(socket, segment, RequestScheme.Http, cancellation.Token);
             _app(env).ContinueWith(t =>
             {
+                segment.Array[segment.Offset] = 0;
                 var buffer = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\n\r\n");
                 socket.BeginSend(buffer, 0, buffer.Length, SocketFlags.None, Sent, socket);
             }, cancellation.Token);
@@ -76,6 +77,7 @@
         {
             var socket = (Socket) ar.AsyncState;
             socket.EndDisconnect(ar);
+            socket.Dispose();
         }
 
         public void Dispose()
