@@ -2,8 +2,10 @@
 {
     using System;
     using System.Net.Sockets;
+    using System.Runtime.CompilerServices;
     using System.Text;
     using System.Threading;
+    using System.Threading.Tasks;
     using Owin;
     using AppFunc = System.Func<System.Collections.Generic.IDictionary<string,object>, System.Threading.Tasks.Task>;
 
@@ -27,6 +29,7 @@
             _acceptArgs = new SocketAsyncEventArgs();
             _acceptArgs.Completed += AcceptArgsOnCompleted;
             _acceptArgs.AcceptSocket = _socket = new Socket(SocketType.Stream, ProtocolType.Tcp);
+            _socket.SetSocketOption(SocketOptionLevel.Tcp, SocketOptionName.Expedited, true);
             acceptBuffer.Alloc(_acceptArgs);
 
 
@@ -72,21 +75,14 @@
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Accepted()
         {
             ThreadPool.QueueUserWorkItem(Next);
             var cancellation = new CancellationTokenSource();
             var receivedSegment = new ArraySegment<byte>(_acceptArgs.Buffer, _acceptArgs.Offset, _acceptArgs.BytesTransferred);
             var env = new FluxEnvironment(_socket, receivedSegment, RequestScheme.Http, cancellation.Token);
-            _appFunc(env).ContinueWith(t =>
-            {
-                OK.CopyTo(_sendArgs.Buffer, _sendArgs.Offset);
-                _sendArgs.SetBuffer(_sendArgs.Offset, OK.Length);
-                if (!_socket.SendAsync(_sendArgs))
-                {
-                    Sent();
-                }
-            }, cancellation.Token);
+            _appFunc(env).ContinueWith(Send, cancellation.Token);
         }
 
         private void Next(object state)
@@ -94,22 +90,26 @@
             _pool.Get().Accept(_listener);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Received()
         {
             var cancellation = new CancellationTokenSource();
             var receivedSegment = new ArraySegment<byte>(_receiveArgs.Buffer, _receiveArgs.Offset, _receiveArgs.Count);
             var env = new FluxEnvironment(_socket, receivedSegment, RequestScheme.Http, cancellation.Token);
-            _appFunc(env).ContinueWith(t =>
-            {
-                int count = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\n\r\n", 0, 1024, _sendArgs.Buffer, _sendArgs.Offset);
-                _sendArgs.SetBuffer(_sendArgs.Offset, count);
-                if (!_socket.SendAsync(_sendArgs))
-                {
-                    Sent();
-                }
-            }, cancellation.Token);
+            _appFunc(env).ContinueWith(Send, cancellation.Token);
         }
 
+        private void Send(Task task)
+        {
+            OK.CopyTo(_sendArgs.Buffer, _sendArgs.Offset);
+            _sendArgs.SetBuffer(_sendArgs.Offset, OK.Length);
+            if (!_socket.SendAsync(_sendArgs))
+            {
+                Sent();
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Sent()
         {
             if (!_socket.DisconnectAsync(_disconnectArgs))
@@ -118,6 +118,7 @@
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void Disconnected()
         {
             _pool.Release(this);

@@ -6,6 +6,7 @@
     using System.Net.Sockets;
     using System.Runtime.Serialization;
     using System.Threading;
+    using System.Threading.Tasks;
     using Saea;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
@@ -38,14 +39,18 @@
         {
             if (1 != Interlocked.Increment(ref _started)) throw new InvalidOperationException("Server is already started.");
 
-            _connectionPool = ConnectionPool.Create(app, 16);
+            _connectionPool = ConnectionPool.Create(app, 128);
             _listenSocket.Bind(new IPEndPoint(_ipAddress, _port));
             _listenSocket.Listen(100);
-            
+
+            //_connectionPool.Get().Accept(_listenSocket);
+
+            Parallel.Invoke(new ParallelOptions{MaxDegreeOfParallelism = 2}, Accept, Accept);
+        }
+
+        private void Accept()
+        {
             _connectionPool.Get().Accept(_listenSocket);
-
-            _app = app;
-
         }
 
         public void Stop()

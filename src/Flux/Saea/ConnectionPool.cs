@@ -54,6 +54,7 @@
                     return _connections.Pop();
                 }
             }
+            Console.WriteLine("ConnectionPool missed");
             return new Connection(_appFunc, _acceptBuffer, _receiveBuffer, _sendBuffer, _disconnectBuffer, this);
         }
 
