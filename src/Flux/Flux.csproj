@@ -9,10 +9,11 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>Flux</RootNamespace>
     <AssemblyName>Flux</AssemblyName>
-    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <RestorePackages>true</RestorePackages>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -22,7 +23,9 @@
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <DocumentationFile>bin\Debug\Flux.XML</DocumentationFile>
+    <DocumentationFile>
+    </DocumentationFile>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
@@ -32,11 +35,15 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <DocumentationFile>..\..\build\Flux.XML</DocumentationFile>
+    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="LibuvSharp">
+      <HintPath>..\libuv\LibuvSharp.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Core" />
@@ -53,15 +60,23 @@
     <Compile Include="HeaderParser.cs" />
     <Compile Include="InvalidRequestException.cs" />
     <Compile Include="OwinKeys.cs" />
+    <Compile Include="Owin\FluxEnvironment.cs" />
+    <Compile Include="Owin\FluxEnvironmentValues.cs" />
+    <Compile Include="Owin\RequestScheme.cs" />
     <Compile Include="RequestLine.cs" />
     <Compile Include="RequestLineParser.cs" />
     <Compile Include="Server.cs" />
-    <Compile Include="Instance.cs" />
     <Compile Include="..\CommonAssemblyInfo.cs">
       <Link>Properties\CommonAssemblyInfo.cs</Link>
     </Compile>
     <Compile Include="StreamExtensions.cs" />
     <Compile Include="TaskHelper.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\libuv\uv.dll">
+      <Link>uv.dll</Link>
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Condition="$(MSBuildProgramFiles32) == ''" Project="$(SolutionDir).nuget\nuget.targets" />

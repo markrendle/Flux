@@ -1,5 +1,6 @@
 namespace Flux
 {
+    using LibuvSharp; // Completion
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
@@ -9,16 +10,17 @@ namespace Flux
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using LibuvSharp.Threading.Tasks;
     using AppFunc = System.Func< // Call
-        System.Collections.Generic.IDictionary<string, object>, // Environment
-        System.Threading.Tasks.Task>; // Completion
+            System.Collections.Generic.IDictionary<string, object>, // Environment
+            System.Threading.Tasks.Task>;
 
     internal sealed class Instance : IDisposable
     {
         private static readonly byte[] Status100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
         private static readonly byte[] Status404NotFound = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not found");
         private static readonly byte[] Status500InternalServerError = Encoding.UTF8.GetBytes("HTTP/1.1 500 Internal Server Error");
-        private readonly Socket _socket;
+        private readonly Tcp _socket;
         private readonly AppFunc _app;
         private readonly int _timeoutSeconds;
         private readonly NetworkStream _networkStream;
@@ -40,21 +42,29 @@ namespace Flux
 
         private BufferStream _bufferStream;
 
-        public Instance(Socket socket, AppFunc app, int timeoutSeconds = 2)
+        public static Instance Start(Tcp socket, AppFunc app)
+        {
+            var instance = new Instance(socket, app);
+            instance.Run();
+            return instance;
+        }
+
+        public Instance(Tcp socket, AppFunc app, int timeoutSeconds = 2)
         {
             _socket = socket;
-            _networkStream = new NetworkStream(_socket, FileAccess.ReadWrite, false);
             _app = app;
             _timeoutSeconds = timeoutSeconds;
             _timer = new Timer(TimeoutCallback, null, 1000, 1000);
         }
 
-        public Task Run()
+        public async Task Run()
         {
+            _socket.Resume();
+            
             var cts = new CancellationTokenSource();
             try
             {
-                var env = CreateEnvironmentDictionary(cts.Token);
+                var env = await CreateEnvironmentDictionary(cts.Token);
                 var headers = HeaderParser.Parse(_networkStream);
                 CheckKeepAlive(headers);
                 env[OwinKeys.RequestHeaders] = headers;
@@ -108,12 +118,13 @@ namespace Flux
             }
         }
 
-        private Dictionary<string, object> CreateEnvironmentDictionary(CancellationToken token)
+        private async Task<Dictionary<string, object>> CreateEnvironmentDictionary(CancellationToken token)
         {
             var env = new Dictionary<string, object>
                           {
                               {OwinKeys.Version, "1.0"}
                           };
+
             var requestLine = RequestLineParser.Parse(_networkStream);
             _isHttp10 = requestLine.HttpVersion.EndsWith("/1.0");
             env[OwinKeys.RequestMethod] = requestLine.Method;

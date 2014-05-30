@@ -2,21 +2,29 @@
 {
     using System;
     using System.Diagnostics;
+    using System.Linq;
     using System.Net;
-    using System.Net.Sockets;
+    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
+    using LibuvSharp;
+    using LibuvSharp.Threading.Tasks;
+    using LibuvSharp.Utilities;
+    using Owin;
     using AppFunc = System.Func< // Call
         System.Collections.Generic.IDictionary<string, object>, // Environment
-                System.Threading.Tasks.Task>; // Done
+                System.Threading.Tasks.Task>;
+    using TcpListener = LibuvSharp.TcpListener;
+
+// Done
 
     public sealed class Server : IDisposable
     {
+        private static readonly byte[] OK = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\n\r\n");
         private AppFunc _app;
-        private static readonly IPAddress Localhost = new IPAddress(new byte[] { 0, 0, 0, 0 });
+        private static readonly IPAddress Localhost = new IPAddress(new byte[] { 127, 0, 0, 1 });
         private readonly TcpListener _listener;
-        private readonly IPAddress _ipAddress;
-        private readonly int _port;
+        private readonly IPEndPoint _endPoint;
         private int _started;
         private int _stopped;
 
@@ -27,9 +35,8 @@
 
         public Server(IPAddress ipAddress, int port)
         {
-            _ipAddress = ipAddress;
-            _port = port;
-            _listener = new TcpListener(_ipAddress, _port);
+            _endPoint = new IPEndPoint(ipAddress, port);
+            _listener = new TcpListener();
             TaskScheduler.UnobservedTaskException += TaskSchedulerOnUnobservedTaskException;
         }
 
@@ -44,8 +51,36 @@
             if (1 != Interlocked.Increment(ref _started)) throw new InvalidOperationException("Server is already started.");
 
             _app = app;
-            _listener.Start();
-            _listener.BeginAcceptSocket(Callback, null);
+            _listener.Bind(_endPoint);
+            _listener.Connection += ListenerOnConnection;
+            _listener.Listen();
+
+            Loop.Default.Run();
+        }
+
+        private static Task Temp()
+        {
+            return Task.FromResult(0);
+        }
+
+        private async void ListenerOnConnection()
+        {
+            var socket = _listener.Accept();
+            var cts = new CancellationTokenSource();
+            socket.Closed += cts.Cancel;
+            var env = await FluxEnvironment.New(socket, RequestScheme.Http, cts.Token);
+            if (env != null)
+            {
+                await _app(env);
+                if (!cts.IsCancellationRequested)
+                {
+                    socket.Write(OK);
+                }
+                if (socket.Active)
+                {
+                    socket.Close();
+                }
+            }
         }
 
         public void Stop()
@@ -54,34 +89,12 @@
             if (1 != Interlocked.Increment(ref _stopped)) return;
             try
             {
-                _listener.Stop();
+                _listener.Close();
             }
             catch (Exception ex)
             {
                 Trace.WriteLine(ex.Message);
             }
-        }
-
-        private void Callback(IAsyncResult ar)
-        {
-            Socket socket;
-            try
-            {
-                socket = _listener.EndAcceptSocket(ar);
-            }
-            catch (ObjectDisposedException)
-            {
-                return;
-            }
-            _listener.BeginAcceptSocket(Callback, null);
-            var instance = new Instance(socket, _app);
-            instance.Run()
-                .ContinueWith(t =>
-                    {
-                        if (!t.IsFaulted) return;
-                        Trace.TraceError(t.Exception != null ? t.Exception.Message : "A bad thing happened.");
-                        instance.TryDispose();
-                    });
         }
 
         public void Dispose()
