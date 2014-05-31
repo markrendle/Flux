@@ -41,9 +41,6 @@
     <StartupObject />
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="LibuvSharp">
-      <HintPath>..\libuv\LibuvSharp.dll</HintPath>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.Composition" />
     <Reference Include="System.Core" />
@@ -54,9 +51,11 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="BufferPin.cs" />
     <Compile Include="BufferStream.cs" />
     <Compile Include="DictionaryExtensions.cs" />
     <Compile Include="DisposableEx.cs" />
+    <Compile Include="FluxByteBufferAllocator.cs" />
     <Compile Include="HeaderParser.cs" />
     <Compile Include="InvalidRequestException.cs" />
     <Compile Include="OwinKeys.cs" />
@@ -77,6 +76,12 @@
       <Link>uv.dll</Link>
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\LibuvSharp\LibuvSharp.csproj">
+      <Project>{281b560a-e3b1-437c-9274-dd655e860e6e}</Project>
+      <Name>LibuvSharp</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Condition="$(MSBuildProgramFiles32) == ''" Project="$(SolutionDir).nuget\nuget.targets" />

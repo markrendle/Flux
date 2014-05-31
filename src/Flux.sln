@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "libuv", "libuv", "{8B4FDE2E
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Flux.Performance", "Flux.Performance\Flux.Performance.csproj", "{2EA5EDE7-6B8F-45E7-9BF9-C068ECD1A8FC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LibuvSharp", "LibuvSharp\LibuvSharp.csproj", "{281B560A-E3B1-437C-9274-DD655E860E6E}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -39,6 +41,10 @@ Global
 		{2EA5EDE7-6B8F-45E7-9BF9-C068ECD1A8FC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2EA5EDE7-6B8F-45E7-9BF9-C068ECD1A8FC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2EA5EDE7-6B8F-45E7-9BF9-C068ECD1A8FC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{281B560A-E3B1-437C-9274-DD655E860E6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{281B560A-E3B1-437C-9274-DD655E860E6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{281B560A-E3B1-437C-9274-DD655E860E6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{281B560A-E3B1-437C-9274-DD655E860E6E}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
