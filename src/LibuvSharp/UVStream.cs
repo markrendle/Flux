@@ -58,6 +58,7 @@ namespace LibuvSharp
 			read_cb_unix = read_callback_u;
 			read_cb_win = read_callback_w;
 			stream = (uv_stream_t *)(handle.ToInt64() + Handle.Size(HandleType.UV_HANDLE));
+		    _dataCallback = NullDataCallback;
 		}
 
 		internal UVStream(Loop loop, int size)
@@ -69,6 +70,13 @@ namespace LibuvSharp
 			: this(loop, Handle.Size(type))
 		{
 		}
+
+	    private static void NullDataCallback(ArraySegment<byte> _) { }
+
+	    public void SetDataCallback(Action<ArraySegment<byte>> callback)
+	    {
+	        _dataCallback = callback ?? NullDataCallback;
+	    }
 
 		public void Resume()
 		{
@@ -136,9 +144,7 @@ namespace LibuvSharp
 
 		void OnData(ArraySegment<byte> data)
 		{
-			if (Data != null) {
-				Data(data);
-			}
+		    _dataCallback(data);
 		}
 
 		public event Action<ArraySegment<byte>> Data;
@@ -213,7 +219,9 @@ namespace LibuvSharp
 		internal static extern int uv_is_writable(IntPtr handle);
 
 		internal bool writeable;
-		public bool Writeable {
+	    private Action<ArraySegment<byte>>  _dataCallback;
+
+	    public bool Writeable {
 			get {
 				return uv_is_writable(NativeHandle) != 0;
 			}

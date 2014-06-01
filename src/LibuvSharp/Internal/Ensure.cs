@@ -2,6 +2,7 @@ using System;
 using System.Net;
 using System.IO;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace LibuvSharp

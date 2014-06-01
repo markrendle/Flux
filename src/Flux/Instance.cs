@@ -1,305 +1,83 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Flux.Owin;
+using LibuvSharp;
+
 namespace Flux
 {
-    using LibuvSharp; // Completion
-    using System;
-    using System.Collections.Generic;
-    using System.Diagnostics;
-    using System.Globalization;
-    using System.IO;
-    using System.Net.Sockets;
-    using System.Text;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using LibuvSharp.Threading.Tasks;
-    using AppFunc = System.Func< // Call
-            System.Collections.Generic.IDictionary<string, object>, // Environment
-            System.Threading.Tasks.Task>;
-
-    internal sealed class Instance : IDisposable
+    internal class Instance
     {
-        private static readonly byte[] Status100Continue = Encoding.UTF8.GetBytes("HTTP/1.1 100 Continue\r\n");
-        private static readonly byte[] Status404NotFound = Encoding.UTF8.GetBytes("HTTP/1.1 404 Not found");
-        private static readonly byte[] Status500InternalServerError = Encoding.UTF8.GetBytes("HTTP/1.1 500 Internal Server Error");
-        private readonly Tcp _socket;
-        private readonly AppFunc _app;
-        private readonly int _timeoutSeconds;
-        private readonly NetworkStream _networkStream;
-        private readonly TaskCompletionSource<int> _taskCompletionSource = new TaskCompletionSource<int>(); 
-        private readonly Timer _timer;
-        private int _tick = int.MinValue;
-        private bool _disposed;
-        private bool _isHttp10;
-        private bool _keepAlive;
+        private static readonly byte[] OK = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\n\r\n");
+        private static readonly ConcurrentStack<Instance> Pool = new ConcurrentStack<Instance>(Enumerable.Range(0, 64).Select(_ => new Instance()));
+        private readonly FluxEnvironment _environment = new FluxEnvironment(RequestScheme);
+        private readonly List<ArraySegment<byte>> _data = new List<ArraySegment<byte>>(16);
+        private Tcp _socket;
+        private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+        private Action<FluxEnvironment, Exception> _callback;
+        public static RequestScheme RequestScheme { get; set; }
+        public static Func<IDictionary<string, object>, Task> AppFunc { get; set; }
 
-        private void TimeoutCallback(object state)
+        public static void Allocate(Tcp socket)
         {
-            if (++_tick > _timeoutSeconds)
+            Instance instance;
+            if (!Pool.TryPop(out instance))
             {
-                Dispose();
-                _taskCompletionSource.SetResult(0);
+                instance = new Instance();
             }
+            instance.Init(socket);
         }
 
-        private BufferStream _bufferStream;
-
-        public static Instance Start(Tcp socket, AppFunc app)
-        {
-            var instance = new Instance(socket, app);
-            instance.Run();
-            return instance;
-        }
-
-        public Instance(Tcp socket, AppFunc app, int timeoutSeconds = 2)
+        private void Init(Tcp socket)
         {
             _socket = socket;
-            _app = app;
-            _timeoutSeconds = timeoutSeconds;
-            _timer = new Timer(TimeoutCallback, null, 1000, 1000);
-        }
-
-        public async Task Run()
-        {
+            _socket.SetDataCallback(SocketOnFirstData);
+            if (_cancellationTokenSource.IsCancellationRequested)
+            {
+                _cancellationTokenSource = new CancellationTokenSource();
+            }
+            socket.Closed += _cancellationTokenSource.Cancel;
             _socket.Resume();
-            
-            var cts = new CancellationTokenSource();
-            try
-            {
-                var env = await CreateEnvironmentDictionary(cts.Token);
-                var headers = HeaderParser.Parse(_networkStream);
-                CheckKeepAlive(headers);
-                env[OwinKeys.RequestHeaders] = headers;
-                env[OwinKeys.ResponseHeaders] = new Dictionary<string, string[]>();
-                env[OwinKeys.ResponseBody] = Buffer;
-                string[] expectContinue;
-                if (headers.TryGetValue("Expect", out expectContinue))
-                {
-                    if (expectContinue.Length == 1 && expectContinue[0].Equals("100-Continue", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _networkStream.WriteAsync(Status100Continue, 0, Status100Continue.Length)
-                                      .ContinueWith(t =>
-                                                        {
-                                                            if (t.IsFaulted)
-                                                            {
-                                                                cts.Cancel();
-                                                                return t;
-                                                            }
-                                                            Buffer.Reset();
-                                                            return _app(env)
-                                                                .ContinueWith(t2 => Result(t2, env), cts.Token);
-                                                        }, cts.Token);
-                    }
-                }
-                Buffer.Reset();
-                _app(env).ContinueWith(t2 => Result(t2, env), cts.Token);
-            }
-            catch (Exception ex)
-            {
-                cts.Cancel();
-                _taskCompletionSource.SetException(ex);
-            }
-            return _taskCompletionSource.Task;
         }
 
-        void CheckKeepAlive(IDictionary<string, string[]> headers)
+        public void Free()
         {
-            if (!_isHttp10)
+            _socket.SetDataCallback(null);
+            _socket = null;
+            _environment.Reset();
+            for (int i = 0; i < _data.Count; i++)
             {
-                _keepAlive = true;
-                return;
-            }
-            _keepAlive = false;
-            string[] connectionValues;
-            if (headers.TryGetValue("Connection", out connectionValues))
-            {
-                if (connectionValues.Length == 1 && connectionValues[0].Equals("Keep-Alive", StringComparison.OrdinalIgnoreCase))
-                {
-                    _keepAlive = true;
-                }
+                BytePool.Intance.Free(_data[i]);
             }
         }
 
-        private async Task<Dictionary<string, object>> CreateEnvironmentDictionary(CancellationToken token)
+        private async void SocketOnFirstData(ArraySegment<byte> bytes)
         {
-            var env = new Dictionary<string, object>
-                          {
-                              {OwinKeys.Version, "1.0"}
-                          };
-
-            var requestLine = RequestLineParser.Parse(_networkStream);
-            _isHttp10 = requestLine.HttpVersion.EndsWith("/1.0");
-            env[OwinKeys.RequestMethod] = requestLine.Method;
-            env[OwinKeys.RequestPathBase] = string.Empty;
-            if (requestLine.Uri.StartsWith("http", StringComparison.InvariantCultureIgnoreCase))
+            _socket.SetDataCallback(SocketOnData);
+            if (Array.IndexOf(bytes.Array, NamedBytes.CarriageReturn, bytes.Offset, bytes.Count) < 0)
             {
-                Uri uri;
-                if (Uri.TryCreate(requestLine.Uri, UriKind.Absolute, out uri))
-                {
-                    env[OwinKeys.RequestPath] = uri.AbsolutePath;
-                    env[OwinKeys.RequestQueryString] = uri.Query;
-                    env[OwinKeys.RequestScheme] = uri.Scheme;
-                }
+                throw new FluxNetworkException("Incomplete request");
             }
-            else
+            await AppFunc(_environment);
+            if (!_cancellationTokenSource.Token.IsCancellationRequested)
             {
-                var splitUri = requestLine.Uri.Split('?');
-                env[OwinKeys.RequestPath] = splitUri[0];
-                env[OwinKeys.RequestQueryString] = splitUri.Length == 2 ? splitUri[1] : string.Empty;
-                env[OwinKeys.RequestScheme] = "http";
+                _socket.Write(OK);
+            }
+            if (_socket.Active)
+            {
+                _socket.Close();
             }
 
-            env[OwinKeys.RequestBody] = _networkStream;
-            env[OwinKeys.CallCancelled] = token;
-            return env;
+            Free();
         }
 
-        internal BufferStream Buffer
+        private void SocketOnData(ArraySegment<byte> bytes)
         {
-            get { return _bufferStream ?? (_bufferStream = new BufferStream());}
-        }
-
-        private void Result(Task task, IDictionary<string,object> env)
-        {
-            if (task.IsFaulted)
-            {
-                _networkStream.WriteAsync(Status500InternalServerError, 0, Status500InternalServerError.Length)
-                    .ContinueWith(_ => Dispose());
-            }
-
-            int status = env.GetValueOrDefault(OwinKeys.ResponseStatusCode, 0);
-            if (status == 0 || status == 404)
-            {
-                _networkStream.WriteAsync(Status404NotFound, 0, Status404NotFound.Length)
-                    .ContinueWith(_ => Dispose());
-            }
-
-            WriteResult(status, env)
-                .ContinueWith(ListenAgain);
-        }
-
-        private void ListenAgain(Task task)
-        {
-            if (task.IsFaulted)
-            {
-                _taskCompletionSource.SetException(task.Exception ?? new Exception("Unknown error."));
-                return;
-            }
-            if (task.IsCanceled)
-            {
-                _taskCompletionSource.SetCanceled();
-                return;
-            }
-            if (_disposed) return;
-            if (!_keepAlive)
-            {
-                _timer.Dispose();
-                Dispose();
-                return;
-            }
-            var buffer = new byte[1];
-            _tick = 0;
-            try
-            {
-                _socket.BeginReceive(buffer, 0, 1, SocketFlags.Peek, ListenCallback, null);
-            }
-            catch (ObjectDisposedException)
-            {
-                _timer.Dispose();
-                Dispose();
-            }
-        }
-
-        private void ListenCallback(IAsyncResult ar)
-        {
-            _tick = int.MinValue;
-            if (_disposed) return;
-            int size = _socket.EndReceive(ar);
-            if (size > 0)
-            {
-                Run();
-            }
-        }
-
-        private Task WriteResult(int status, IDictionary<string,object> env)
-        {
-            var headerBuilder = new StringBuilder();
-            headerBuilder.Append(_isHttp10 ? "HTTP/1.0 " : "HTTP/1.1 ").Append(status).Append("\r\n");
-
-            var headers = (IDictionary<string,string[]>)env[OwinKeys.ResponseHeaders];
-            if (!headers.ContainsKey("Content-Length"))
-            {
-                headers["Content-Length"] = new[] {Buffer.Length.ToString(CultureInfo.InvariantCulture)};
-            }
-            if (_isHttp10 && _keepAlive)
-            {
-                headers["Connection"] = new[] { "Keep-Alive" };
-            }
-            foreach (var header in headers)
-            {
-                switch (header.Value.Length)
-                {
-                    case 0:
-                        continue;
-                    case 1:
-                        headerBuilder.AppendFormat("{0}: {1}\r\n", header.Key, header.Value[0]);
-                        continue;
-                }
-                foreach (var value in header.Value)
-                {
-                    headerBuilder.AppendFormat("{0}: {1}\r\n", header.Key, value);
-                }
-            }
-
-            return WriteResponse(headerBuilder);
-        }
-
-        private Task WriteResponse(StringBuilder headerBuilder)
-        {
-            headerBuilder.Append("\r\n");
-            var bytes = Encoding.UTF8.GetBytes(headerBuilder.ToString());
-
-            var task = _networkStream.WriteAsync(bytes, 0, bytes.Length);
-            if (task.IsFaulted || task.IsCanceled) return task;
-            if (Buffer.Length > 0)
-            {
-                task = task.ContinueWith(t => WriteBuffer()).Unwrap();
-            }
-
-            return task;
-        }
-
-        private Task WriteBuffer()
-        {
-            if (Buffer.Length <= int.MaxValue)
-            {
-                Buffer.Position = 0;
-                byte[] buffer;
-                if (Buffer.TryGetBuffer(out buffer))
-                {
-                    return _networkStream.WriteAsync(buffer, 0, (int)Buffer.Length);
-                }
-                Buffer.CopyTo(_networkStream);
-            }
-            return TaskHelper.Completed();
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            _timer.TryDispose();
-            _networkStream.TryDispose();
-            _socket.TryDispose();
-            if (_bufferStream != null)
-            {
-                try
-                {
-                    _bufferStream.ForceDispose();
-                }
-                catch (Exception ex)
-                {
-                    Trace.TraceError(ex.Message);
-                }
-            }
+            _data.Add(bytes);
         }
     }
 }

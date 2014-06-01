@@ -11,76 +11,46 @@ namespace Flux.Owin
     using System.Threading.Tasks;
     using LibuvSharp;
 
+    internal static class NamedBytes
+    {
+        public const byte CarriageReturn = (byte)'\r';
+        public const byte NewLine = (byte)'\n';
+    }
+
     public partial class FluxEnvironment : IDictionary<string, object>
     {
-        private static readonly ConcurrentStack<FluxEnvironment> _pool = new ConcurrentStack<FluxEnvironment>(Enumerable.Repeat(0, 1024).Select(_ => new FluxEnvironment()));
+        private static readonly ConcurrentStack<FluxEnvironment> _pool = new ConcurrentStack<FluxEnvironment>(Enumerable.Repeat(0, 1024).Select(_ => new FluxEnvironment(_requestScheme)));
         private const byte CarriageReturn = (byte)'\r';
         private const byte NewLine = (byte)'\n';
         private Tcp _socket;
-        private readonly List<ArraySegment<byte>> _data = new List<ArraySegment<byte>>();
+        private List<ArraySegment<byte>> _data = new List<ArraySegment<byte>>();
         private int _requestLineCount;
         private readonly IDictionary<string, object> _internal = new Dictionary<string, object>();
         private readonly object _syncRoot;
+        private static RequestScheme _requestScheme;
 
-        public static Task<FluxEnvironment> New(Tcp socket, RequestScheme requestScheme, CancellationToken callCancellationToken)
-        {
-            var tcs = new TaskCompletionSource<FluxEnvironment>();
-            socket.Data +=
-                bytes =>
-                {
-                    if (Array.IndexOf(bytes.Array, CarriageReturn, bytes.Offset, bytes.Count) < 0)
-                    {
-                        tcs.SetException(new FluxNetworkException("Incomplete request"));
-                    }
-                    else
-                    {
-                        FluxEnvironment env;
-                        if (!_pool.TryPop(out env))
-                        {
-                            env = new FluxEnvironment();
-                        }
-                        env.Init(socket, bytes, requestScheme, callCancellationToken);
-                        tcs.SetResult(env);
-                    }
-                };
-            socket.Resume();
-            return tcs.Task;
-        }
-
-        private FluxEnvironment()
+        internal FluxEnvironment(RequestScheme requestScheme)
         {
             _data = new List<ArraySegment<byte>>(16);
             _internal = new Dictionary<string, object>(32);
             _syncRoot = ((ICollection)_internal).SyncRoot;
+            _requestScheme = requestScheme;
         }
 
-        private void Init(Tcp socket, ArraySegment<byte> data, RequestScheme requestScheme,
+        internal void Init(Tcp socket, List<ArraySegment<byte>> data, RequestScheme requestScheme,
             CancellationToken callCancellationToken)
         {
             _socket = socket;
-            _socket.Data += SocketOnData;
-            _data.Add(data);
-            _requestLineCount = Array.IndexOf(data.Array, CarriageReturn, data.Offset, data.Count) - data.Offset;
+            _data = data;
+            _requestLineCount = Array.IndexOf(data[0].Array, CarriageReturn, data[0].Offset, data[0].Count) - data[0].Offset;
             _internal[OwinKeys.Version] = "1.0";
             _internal[OwinKeys.CallCancelled] = callCancellationToken;
             _internal[OwinKeys.RequestScheme] = requestScheme == RequestScheme.Http ? "http" : "https";
         }
 
-        public void Free()
+        internal void Reset()
         {
-            _socket.Data -= SocketOnData;
-            _socket = null;
-            for (int i = 0; i < _data.Count; i++)
-            {
-                BytePool.Intance.Free(_data[i]);
-            }
-            _data.Clear();
             _internal.Clear();
-            _pool.Push(this);
-        }
-
-        private void SocketOnData(ArraySegment<byte> data)
-        {
         }
 
         public IEnumerator<KeyValuePair<string, object>> GetEnumerator()

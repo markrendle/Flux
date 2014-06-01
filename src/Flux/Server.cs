@@ -6,7 +6,6 @@
     using System.Net;
     using System.Text;
     using System.Threading;
-    using System.Threading.Tasks;
     using LibuvSharp;
     using LibuvSharp.Threading.Tasks;
     using LibuvSharp.Utilities;
@@ -21,7 +20,6 @@
     public sealed class Server : IDisposable
     {
         private static readonly byte[] OK = Encoding.UTF8.GetBytes("HTTP/1.1 200 OK\r\n\r\n");
-        private AppFunc _app;
         private static readonly IPAddress Localhost = new IPAddress(new byte[] { 127, 0, 0, 1 });
         private readonly Loop _loop;
         private readonly TcpListener _listener;
@@ -39,20 +37,14 @@
             _endPoint = new IPEndPoint(ipAddress, port);
             _loop = new Loop(new FluxByteBufferAllocator());
             _listener = new TcpListener(_loop);
-            TaskScheduler.UnobservedTaskException += TaskSchedulerOnUnobservedTaskException;
-        }
-
-        private void TaskSchedulerOnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs unobservedTaskExceptionEventArgs)
-        {
-            Trace.TraceError(unobservedTaskExceptionEventArgs.Exception.Message);
-            unobservedTaskExceptionEventArgs.SetObserved();
         }
 
         public void Start(AppFunc app)
         {
             if (1 != Interlocked.Increment(ref _started)) throw new InvalidOperationException("Server is already started.");
 
-            _app = app;
+            Instance.AppFunc = app;
+            Instance.RequestScheme = RequestScheme.Http;
             _listener.Bind(_endPoint);
             _listener.Connection += ListenerOnConnection;
             _listener.Listen();
@@ -60,31 +52,9 @@
             _loop.Run();
         }
 
-        private static Task Temp()
+        private void ListenerOnConnection()
         {
-            return Task.FromResult(0);
-        }
-
-        private async void ListenerOnConnection()
-        {
-            var socket = _listener.Accept();
-            socket.NoDelay = true;
-            var cts = new CancellationTokenSource();
-            socket.Closed += cts.Cancel;
-            var env = await FluxEnvironment.New(socket, RequestScheme.Http, cts.Token);
-            if (env != null)
-            {
-                await _app(env);
-                if (!cts.IsCancellationRequested)
-                {
-                    socket.Write(OK);
-                }
-                if (socket.Active)
-                {
-                    socket.Close();
-                }
-                env.Free();
-            }
+            Instance.Allocate(_listener.Accept());
         }
 
         public void Stop()

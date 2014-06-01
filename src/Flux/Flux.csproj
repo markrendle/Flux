@@ -57,6 +57,7 @@
     <Compile Include="DisposableEx.cs" />
     <Compile Include="FluxByteBufferAllocator.cs" />
     <Compile Include="HeaderParser.cs" />
+    <Compile Include="Instance.cs" />
     <Compile Include="InvalidRequestException.cs" />
     <Compile Include="OwinKeys.cs" />
     <Compile Include="Owin\FluxEnvironment.cs" />
